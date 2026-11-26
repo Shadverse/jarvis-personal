@@ -71,13 +71,12 @@ function gate() {
     ? t("فعال‌سازی حساب", "Activate account")
     : t("به جارویس شادوِرس خوش آمدید", "Welcome to SHADVERSE JARVIS");
   const field = (id, text, type, ico, ac, placeholder) =>
-    `<label>${text}<span class="field">${icon(ico)}<input name="${id}" type="${type}" autocomplete="${ac}" required dir="ltr" placeholder="${placeholder}" ${id === "name" ? 'minlength="3" maxlength="48" pattern="[A-Za-z0-9_.\\-]+"' : 'minlength="12" maxlength="256"'}>${id === "password" ? button("reveal", icon("eye"), "eye") : ""}</span></label>`;
-  return `<main class="gate"><header class="bar">${brand()}${language()}</header><div class="gatebody">
- <div class="gateart">${energyCore()}</div>
- <section class="gateform glass" dir="${lang === "fa" ? "rtl" : "ltr"}"><span class="seal">${icon("lock")}</span><h1>${heading}</h1><p class="sub">${activation ? t("حساب خود را با کد ثبت‌نام فعال کنید.", "Activate your account with a registration code.") : t("وارد فضای شخصی خود شوید.", "Sign in to your private workspace.")}</p>
+    `<label>${text}<span class="field">${icon(ico)}<input name="${id}" type="${type}" autocomplete="${ac}" required dir="${id === "code" ? "ltr" : "auto"}" placeholder="${placeholder}" ${id === "name" ? 'minlength="3" maxlength="48" pattern="[A-Za-z0-9_.\\-]+"' : 'minlength="12" maxlength="256"'}>${id === "password" ? button("reveal", icon("eye"), "eye") : ""}</span></label>`;
+  return `<main class="gate"><header class="bar">${language()}</header><div class="gatebody">
+ <section class="gateform glass" dir="${lang === "fa" ? "rtl" : "ltr"}"><div class="identity"><div class="emblem">${energyCore()}<img src="./icon-192.png" alt=""></div><strong>${productName()}</strong></div><h1>${heading}</h1><p class="sub">${activation ? t("حساب خود را با کد ثبت‌نام فعال کنید.", "Activate your account with a registration code.") : t("وارد فضای شخصی خود شوید.", "Sign in to your private workspace.")}</p>
  <form id="auth">${field("name", t("نام کاربری", "Username"), "text", "user", "username", "jarvis.user")}${field("password", t("گذرواژه", "Password"), reveal ? "text" : "password", "lock", activation ? "new-password" : "current-password", "••••••••••••")}${activation ? field("code", t("کد ثبت‌نام", "Registration code"), "text", "key", "off", "•••• ••••") : ""}
- ${notice()}<button class="primary" type="submit">${activation ? t("فعال‌سازی", "Activate") : t("ورود به جارویس شادوِرس", "Sign in to SHADVERSE JARVIS")}${icon("arrow")}</button></form>
- <div class="gateactions">${button("activation", icon(activation ? "user" : "key") + (activation ? t("بازگشت به ورود", "Back to sign in") : t("فعال‌سازی با کد ثبت‌نام", "Activate with a registration code")), "textbtn")}</div>
+ ${notice()}<button class="primary" type="submit">${activation ? t("فعال‌سازی", "Activate") : t("ورود به جارویس شادوِرس", "Sign in to SHADVERSE JARVIS")}</button></form>
+ <div class="gateactions">${button("activation", activation ? t("بازگشت به ورود", "Back to sign in") : t("فعال‌سازی با کد ثبت‌نام", "Activate with a registration code"), "textbtn")}</div>
  ${button("review", t("مشاهدهٔ پیش‌نمایش", "Explore visual preview"), "reviewbtn")}</section></div>
  <footer class="foot"><span class="en">SHADVERSE ©</span>${attribution()}</footer></main>`;
 }
@@ -156,7 +155,7 @@ function shell() {
  <nav class="navgroup"><small>${t("محیط شخصی", "Personal space")}</small>${["main", "voice", "workspace"].map(nav).join("")}</nav>
  <nav class="navgroup"><small>${t("حساب کاربری", "Account")}</small>${nav("plans")}${creator ? nav("admin") : ""}</nav>
  <div class="railbottom"><span class="pill">${icon("user")}${review ? previewLabel() : `<bdi>${safe(session.name)}</bdi>`}</span>${button("logout", icon("logout") + t("خروج", "Sign out"), "navbtn")}</div></aside>
- <main class="main"><header class="top"><div class="title">${button("menu", icon("menu"), "iconbtn mobilemenu")}<b>${productName()}</b></div><div class="topactions"><span class="pill"><i class="dot"></i>${previewLabel()}</span>${language()}</div></header>
+ <main class="main"><header class="top"><div class="topstart">${button("menu", icon("menu"), "iconbtn mobilemenu")}</div><strong class="topname">${productName()}</strong><div class="topactions"><span class="pill"><i class="dot"></i>${previewLabel()}</span>${language()}</div></header>
  <div class="page">${{ main: home, voice, workspace: space, plans, admin }[page]()}${notice()}</div>
  <footer class="footnote"><span class="en">SHADVERSE ©</span>${attribution()}</footer></main></div>`;
 }

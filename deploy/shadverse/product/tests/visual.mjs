@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { checkAlignment } from "./alignment.mjs";
+const alignmentRows = [];
 const requireUi = createRequire(
   new URL("../../../ui/package.json", new URL("../", import.meta.url)),
 );
@@ -31,6 +33,7 @@ try {
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("http://localhost:3000/review");
     const snap = async (name, capture) => {
+      await page.mouse.move(0, 0);
       await page.evaluate(() => document.fonts.ready);
       assert.ok(await page.evaluate(() => document.fonts.check("16px Vazir")));
       assert.equal(await page.locator("html").getAttribute("dir"), "rtl");
@@ -38,12 +41,28 @@ try {
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         device + "/" + name,
       );
+      const ink = await checkAlignment(page, name);
+      alignmentRows.push(
+        `| ${width} × ${height} | ${name} | ${ink.length} | ${Math.max(...ink.map((m) => Math.abs(m.offset))).toFixed(2)} px | ${Math.min(...ink.map((m) => m.contrast)).toFixed(2)} |`,
+      );
       if (capture) await page.screenshot({ path: output + device + "-" + name + ".png" });
       screens++;
     };
     await page.getByRole("heading", { name: "به جارویس شادوِرس خوش آمدید", exact: true }).waitFor();
     await page.getByRole("button", { name: "ورود به جارویس شادوِرس", exact: true }).waitFor();
+    assert.equal(await page.locator(".identity strong").innerText(), "جارویس شادوِرس");
     await snap("login", true);
+    await page.locator("[name=name]").fill("نام آزمایشی");
+    assert.equal(
+      await page.locator("[name=name]").evaluate((el) => getComputedStyle(el).direction),
+      "rtl",
+    );
+    await page.locator("[name=name]").fill("jarvis.user");
+    assert.equal(
+      await page.locator("[name=name]").evaluate((el) => getComputedStyle(el).direction),
+      "ltr",
+    );
+    await page.locator("[name=name]").fill("");
     if (mobile) {
       assert.equal(
         await page.locator("[name=name]").evaluate((el) => getComputedStyle(el).fontSize),
@@ -65,7 +84,23 @@ try {
     await page.click("[data-action=activation]");
     await page.click("[data-action=review]");
     await snap("main", true);
+    assert.equal(
+      await page
+        .locator(".navbtn")
+        .first()
+        .evaluate((el) => getComputedStyle(el).textAlign),
+      "start",
+    );
     assert.equal(await page.locator(".shortcut").count(), 5);
+    if (mobile) {
+      const toolPositions = await page
+        .locator(".tools button,.tools select")
+        .evaluateAll((controls) => controls.map((el) => el.getBoundingClientRect().top));
+      assert.ok(
+        Math.max(...toolPositions) - Math.min(...toolPositions) <= 2,
+        "Mobile composer controls share one row",
+      );
+    }
     await page.locator("#draft").fill("فایل JARVIS 2026");
     assert.equal(
       await page.locator("#draft").evaluate((el) => getComputedStyle(el).direction),
@@ -81,6 +116,12 @@ try {
       await page.click("[data-action=demo-" + state + "]");
       assert.equal(await page.locator(".voice-stage .energy").getAttribute("data-state"), state);
       assert.equal(await page.locator(".modes [aria-pressed=true]").count(), 1);
+      assert.equal(
+        await page
+          .locator(".jewel")
+          .evaluate((el) => getComputedStyle(el, "::after").animationName),
+        "none",
+      );
       assert.equal(
         await page.locator(".levitate").evaluate((el) => getComputedStyle(el).animationName),
         "none",
@@ -150,3 +191,19 @@ try {
 } finally {
   await portableBrowser.close();
 }
+
+await writeFile(
+  output + "persian-alignment.md",
+  `# Persian alignment and typography
+
+Each row covers a real Chromium render in Persian. Two screenshots of the same page, one with transparent text, isolate the painted glyphs. Each line’s visible left and right edges are compared with the center of its containing panel. The tolerance is 3 CSS pixels. On login and activation, the card and logo are also checked against the page’s horizontal axis and the card against its vertical axis, within 1 CSS pixel.
+
+Contrast compares the computed text color with the sampled background under the ink. The thresholds are 4.5 for normal text and 3 for text at least 24 px tall. Coverage includes login action labels, the welcome heading, product name, primary headings, section titles and explanatory subtitles. Native browser validation and the physical device keyboard are outside this measurement.
+
+| Viewport | Screen | Painted lines | Largest center offset | Lowest contrast ratio |
+| --- | --- | ---: | ---: | ---: |
+${alignmentRows.join("\n")}
+
+The OFL-licensed Vazirmatn font loaded on all three viewports. The login test checks the exact Persian welcome heading and primary action, 16 px mobile input text, and automatic direction for both Persian and Latin input. The composer preserves the Persian reading direction in mixed Persian–Latin drafts. Navigation labels keep start alignment. The visual suite also checks English navigation, keyboard-height layout and the reduced-motion states.
+`,
+);

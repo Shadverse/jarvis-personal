@@ -24,6 +24,9 @@ try {
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
     await page.goto("http://localhost:3000/review");
     await page.evaluate(() => document.fonts.ready);
+    await page.waitForFunction(
+      () => performance.getEntriesByName("first-contentful-paint").length > 0,
+    );
     const load = await page.evaluate(() => ({
       paint: performance.getEntriesByName("first-contentful-paint")[0]?.startTime,
       bytes: performance
@@ -76,6 +79,10 @@ try {
   await page.goto("http://localhost:3000/review");
   assert.equal(
     await page.locator(".levitate").evaluate((el) => getComputedStyle(el).animationName),
+    "none",
+  );
+  assert.equal(
+    await page.locator(".jewel").evaluate((el) => getComputedStyle(el, "::after").animationName),
     "none",
   );
   await fallback.close();

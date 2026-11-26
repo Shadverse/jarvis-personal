@@ -6,7 +6,7 @@ This feature adds the Persian-first product shell and application login for Crea
 
 Download [the portable preview](review/SHADVERSE-JARVIS-preview.zip), extract the HTML file, and open it in a browser. Choose «مشاهدهٔ پیش‌نمایش» on the login screen. Use the right navigation rail or the menu on mobile to open the voice assistant, workspace, subscriptions and Creator administration. The EN button switches to English. The portable version runs locally and uses embedded fonts and artwork. Account operations require the server below.
 
-[Before and after](review/before-after.jpg) · [Contact sheet](review/contact-sheet.jpg) · [Full-resolution browser captures](review/) · [Mobile rendering measurements](review/mobile-performance.md)
+[Phase 03.1 and 03.2 comparison](review/before-after.jpg) · [Contact sheet](review/contact-sheet.jpg) · [Full-resolution browser captures](review/) · [Persian centering and typography](review/persian-alignment.md) · [Mobile rendering measurements](review/mobile-performance.md)
 
 The login, assistant and voice screens use the OFL-licensed Vazirmatn variable font and locally rendered artwork. On the voice screen, select any state to change the core’s lighting and movement. The microphone button runs a separate availability check.
 
