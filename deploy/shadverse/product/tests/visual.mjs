@@ -41,18 +41,51 @@ try {
       if (capture) await page.screenshot({ path: output + device + "-" + name + ".png" });
       screens++;
     };
+    await page.getByRole("heading", { name: "به جارویس شادوِرس خوش آمدید", exact: true }).waitFor();
+    await page.getByRole("button", { name: "ورود به جارویس شادوِرس", exact: true }).waitFor();
     await snap("login", true);
+    if (mobile) {
+      assert.equal(
+        await page.locator("[name=name]").evaluate((el) => getComputedStyle(el).fontSize),
+        "16px",
+      );
+      await page.setViewportSize({ width, height: 470 });
+      await page.locator("[name=password]").focus();
+      await page.locator("[type=submit]").scrollIntoViewIfNeeded();
+      assert.ok(
+        await page
+          .locator("[type=submit]")
+          .evaluate((el) => el.getBoundingClientRect().bottom <= innerHeight + 1),
+      );
+      await page.setViewportSize({ width, height });
+      await page.evaluate(() => scrollTo(0, 0));
+    }
     await page.click("[data-action=activation]");
     await snap("activation");
     await page.click("[data-action=activation]");
     await page.click("[data-action=review]");
     await snap("main", true);
+    assert.equal(await page.locator(".shortcut").count(), 5);
+    await page.locator("#draft").fill("فایل JARVIS 2026");
+    assert.equal(
+      await page.locator("#draft").evaluate((el) => getComputedStyle(el).direction),
+      "rtl",
+    );
     async function nav(k) {
       if (mobile) await page.click(".mobilemenu");
       await page.click("nav [data-action=" + k + "]");
     }
     await nav("voice");
     await snap("voice", true);
+    for (const state of ["listening", "thinking", "speaking", "disconnected", "idle"]) {
+      await page.click("[data-action=demo-" + state + "]");
+      assert.equal(await page.locator(".voice-stage .energy").getAttribute("data-state"), state);
+      assert.equal(await page.locator(".modes [aria-pressed=true]").count(), 1);
+      assert.equal(
+        await page.locator(".levitate").evaluate((el) => getComputedStyle(el).animationName),
+        "none",
+      );
+    }
     await nav("workspace");
     await snap("workspace");
     await page.click("[data-action=tab-gallery]");
@@ -70,6 +103,8 @@ try {
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       );
     }
+    await nav("main");
+    assert.equal(await page.locator("#draft").inputValue(), "فایل JARVIS 2026");
     assert.deepEqual(errors, []);
     await context.close();
   }

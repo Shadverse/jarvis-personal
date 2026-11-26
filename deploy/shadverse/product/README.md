@@ -1,4 +1,4 @@
-# SHADVERSE JARVIS · Persian Gate
+# جارویس شادوِرس · SHADVERSE JARVIS
 
 This feature adds the Persian-first product shell and application login for Creator visual review. The existing Creator deployment and its device pairing continue to use the [upstream deployment profile](../README.md). The product follows the [unified platform architecture](../ARCHITECTURE.md).
 
@@ -6,7 +6,9 @@ This feature adds the Persian-first product shell and application login for Crea
 
 Download [the portable preview](review/SHADVERSE-JARVIS-preview.zip), extract the HTML file, and open it in a browser. Choose «مشاهدهٔ پیش‌نمایش» on the login screen. Use the right navigation rail or the menu on mobile to open the voice assistant, workspace, subscriptions and Creator administration. The EN button switches to English. The portable version runs locally and uses embedded fonts and artwork. Account operations require the server below.
 
-[Contact sheet](review/contact-sheet.jpg) · [Full-resolution browser captures](review/)
+[Before and after](review/before-after.jpg) · [Contact sheet](review/contact-sheet.jpg) · [Full-resolution browser captures](review/) · [Mobile rendering measurements](review/mobile-performance.md)
+
+The login, assistant and voice screens use the OFL-licensed Vazirmatn variable font and locally rendered artwork. On the voice screen, select any state to change the core’s lighting and movement. The microphone button runs a separate availability check.
 
 ## Run the authenticated preview locally
 
@@ -37,8 +39,8 @@ Use `node manage.mjs invite` privately to issue a one-use member code valid for 
 | Screen         | Implemented here                                                                                                   | Requires later integration                                                              |
 | -------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
 | Gate           | Username/password sign-in, one-time code activation, secure cookie, server-side logout, Persian and English errors | Production HTTPS proxy cutover                                                          |
-| Command center | Animated core, local text drafting, attachment selection and removal, connection status                            | In-shell inference, model choices, uploading and chat history                           |
-| Voice          | Browser microphone permission and availability check, immediate release of all tracks                              | Speech recognition, voice model and playback                                            |
+| Assistant      | Refractive glass core, prompt starters, local text drafts, attachment selection and removal, connection status     | In-shell inference, model choices, uploading and chat history                           |
+| Voice          | Five labeled visual demonstrations and a microphone availability check that immediately releases all tracks        | Speech recognition, voice model and playback                                            |
 | Workspace      | History, projects, memory, files and gallery navigation, search field with explicit availability feedback          | Tenant-authorized storage, search and retrieval                                         |
 | Subscription   | Free, Pro and Ultra views, monthly and annual terms, usage and quota section                                       | Entitlement enforcement, pricing, metering and purchases                                |
 | Administration | Real Creator-only account directory, operator CLI for codes and session revocation                                 | Web management of roles, subscriptions, model policies, costs, audit and emergency stop |

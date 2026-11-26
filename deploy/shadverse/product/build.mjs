@@ -19,15 +19,16 @@ await build({
   bundle: true,
   minify: true,
   format: "iife",
-  loader: { ".woff2": "file" },
-  assetNames: "fonts/[name]",
+  loader: { ".woff2": "file", ".webp": "dataurl" },
+  assetNames: "assets/[name]",
 });
 let css = await readFile("dist/style.css", "utf8");
-for (const name of ["vazirmatn", "space-grotesk-latin"]) {
-  const file = "./fonts/" + name + ".woff2";
+for (const name of ["vazirmatn.woff2", "space-grotesk-latin.woff2"]) {
+  const file = "./assets/" + name;
+  const mime = "font/woff2";
   css = css.replaceAll(
     file,
-    "data:font/woff2;base64," + (await readFile("web/" + file)).toString("base64"),
+    "data:" + mime + ";base64," + (await readFile("dist/" + file)).toString("base64"),
   );
 }
 const fontLicenses = (
