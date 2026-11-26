@@ -1,5 +1,9 @@
+import lensMap from "./art/glass-normal.png";
 import { energyCore, voiceStates } from "./core.js";
 import { icon } from "./icons.js";
+import { Signal } from "./identity/audio.js";
+import { mountHead } from "./identity/head.js";
+import { mountScope } from "./instruments.js";
 const app = document.querySelector("#app");
 const standalone =
   location.protocol === "file:" || document.documentElement.hasAttribute("data-standalone");
@@ -24,11 +28,43 @@ const safe = (value) =>
     /[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
   );
+let workspaceEpoch = 0,
+  meterTimer = 0;
+let head = null,
+  stopScope = null,
+  lastPortrait = null,
+  voiceEpoch = 0;
+let projects = [],
+  activeProject = "",
+  notes = [],
+  savedDrafts = [],
+  resources = [],
+  query = "";
+const signal = new Signal(() => {
+  demoState = "idle";
+  micState = t("پخش یا دریافت صدا پایان یافت.", "Audio session ended.");
+  if (page === "voice") syncVoice();
+});
+function stopAudio() {
+  voiceEpoch++;
+  clearInterval(meterTimer);
+  signal.stop();
+}
+function clearWorkspace() {
+  workspaceEpoch++;
+  projects = [];
+  activeProject = "";
+  notes = [];
+  savedDrafts = [];
+  resources = [];
+  query = "";
+}
 const names = () => ({
   login: t("ورود", "Sign in"),
   main: t("دستیار من", "My assistant"),
   voice: t("دستیار صوتی", "Voice assistant"),
   workspace: t("فضای کار", "Workspace"),
+  monitor: t("پایش و ابزارها", "Monitor & tools"),
   plans: t("اشتراک", "Subscription"),
   admin: t("مدیریت سازنده", "Creator administration"),
   history: t("گفت‌وگوها", "Conversations"),
@@ -41,6 +77,7 @@ const glyph = {
   main: "core",
   voice: "wave",
   workspace: "folder",
+  monitor: "wave",
   plans: "plan",
   admin: "shield",
   history: "chat",
@@ -73,7 +110,7 @@ function gate() {
   const field = (id, text, type, ico, ac, placeholder) =>
     `<label>${text}<span class="field">${icon(ico)}<input name="${id}" type="${type}" autocomplete="${ac}" required dir="${id === "code" ? "ltr" : "auto"}" placeholder="${placeholder}" ${id === "name" ? 'minlength="3" maxlength="48" pattern="[A-Za-z0-9_.\\-]+"' : 'minlength="12" maxlength="256"'}>${id === "password" ? button("reveal", icon("eye"), "eye") : ""}</span></label>`;
   return `<main class="gate"><header class="bar">${language()}</header><div class="gatebody">
- <section class="gateform glass" dir="${lang === "fa" ? "rtl" : "ltr"}"><div class="identity"><div class="emblem">${energyCore()}<img src="./icon-192.png" alt=""></div><strong>${productName()}</strong></div><h1>${heading}</h1><p class="sub">${activation ? t("حساب خود را با کد ثبت‌نام فعال کنید.", "Activate your account with a registration code.") : t("وارد فضای شخصی خود شوید.", "Sign in to your private workspace.")}</p>
+ <section class="gateform glass" dir="${lang === "fa" ? "rtl" : "ltr"}"><div class="identity"><div class="emblem"><img src="./icon-192.png" alt=""></div><strong>${productName()}</strong></div><h1>${heading}</h1><p class="sub">${activation ? t("حساب خود را با کد ثبت‌نام فعال کنید.", "Activate your account with a registration code.") : t("وارد فضای شخصی خود شوید.", "Sign in to your private workspace.")}</p>
  <form id="auth">${field("name", t("نام کاربری", "Username"), "text", "user", "username", "jarvis.user")}${field("password", t("گذرواژه", "Password"), reveal ? "text" : "password", "lock", activation ? "new-password" : "current-password", "••••••••••••")}${activation ? field("code", t("کد ثبت‌نام", "Registration code"), "text", "key", "off", "•••• ••••") : ""}
  ${notice()}<button class="primary" type="submit">${activation ? t("فعال‌سازی", "Activate") : t("ورود به جارویس شادوِرس", "Sign in to SHADVERSE JARVIS")}</button></form>
  <div class="gateactions">${button("activation", activation ? t("بازگشت به ورود", "Back to sign in") : t("فعال‌سازی با کد ثبت‌نام", "Activate with a registration code"), "textbtn")}</div>
@@ -94,7 +131,7 @@ const starters = () => ({
   ],
 });
 function home() {
-  return `<div class="studio"><section class="greeting">${energyCore()}<h1>${t("از کجا شروع کنیم؟", "Where shall we begin?")}</h1><div class="starters">${Object.entries(
+  return `<div class="studio"><section class="greeting"><div class="identity-field">${energyCore()}</div><h1>${t("از کجا شروع کنیم؟", "Where shall we begin?")}</h1><div class="starters">${Object.entries(
     starters(),
   )
     .map(([key, [caption]]) => button("prompt-" + key, caption, "starter"))
@@ -102,7 +139,7 @@ function home() {
  <section class="composearea" aria-label="${t("گفت‌وگو", "Conversation")}">
  ${session?.controlUI && !review ? `<p><a class="outline" href="${safe(session.controlUI)}" target="_blank" rel="noreferrer">${t("باز کردن دستیار متصل", "Open paired assistant")}</a></p>` : ""}<div class="composer glass"><textarea id="draft" dir="auto" aria-label="${t("پیام", "Message")}" placeholder="${t("برای جارویس شادوِرس بنویسید…", "Write your message…")}">${safe(draft)}</textarea>
  <div id="attachments">${files.map((f, i) => `<span class="chip"><bdi>${safe(f.name)}</bdi>${button("remove-" + i, icon("close"), "remove")}</span>`).join("")}</div>
- <div class="tools">${button("attach", icon("attach"), "iconbtn")}<input type="file" multiple id="file" hidden><select aria-label="${t("انتخاب مدل", "Model selection")}" disabled><option>${t("مدل پیش‌فرض", "Default model")}</option></select>
+ <div class="draft-actions">${button("save-draft", icon("layers") + t("ذخیرهٔ پیش‌نویس", "Save draft"), "textbtn")}</div><div class="tools">${button("attach", icon("attach"), "iconbtn")}<input type="file" multiple id="file" hidden><select aria-label="${t("انتخاب مدل", "Model selection")}" disabled><option>${t("مدل پیش‌فرض", "Default model")}</option></select>
  ${button("voice", icon("wave") + label("voice"), "voicebtn")}<button class="primary send" disabled aria-label="${t("ارسال", "Send")}" title="${offline()}">${icon("send")}</button></div></div><p class="status"><i></i>${offline()}</p></section>
  <section class="library"><h2>${label("workspace")}</h2><div class="shortcuts glass">${["history", "projects", "memory", "files", "gallery"].map((k) => button("tab-" + k, icon(glyph[k]) + "<span>" + label(k) + "</span>", "shortcut")).join("")}</div></section></div>`;
 }
@@ -111,12 +148,12 @@ function title(k) {
 }
 function voice() {
   const stateLabel = (k) => t(...voiceStates[k]);
+
   return `<section class="voice-stage" data-state="${demoState}"><h1>${label("voice")}</h1>
-  <p class="sub">${t("این حالت‌ها نمایشی هستند. سرویس صوتی متصل نیست.", "Voice states are demonstrations. The voice service is disconnected.")}</p>
-  ${energyCore(demoState)}
-  <div class="waveform" aria-hidden="true">${"<i></i>".repeat(39)}</div>
-  <h2 aria-live="polite">${stateLabel(demoState)}</h2>
-  <div class="modes glass" role="group" aria-label="${t("انتخاب حالت نمایشی", "Select demonstration state")}">${Object.keys(
+  <p class="sub">${t("این حالت‌ها نمایشی‌اند. گفت‌وگوی زنده متصل نیست.", "Portrait and audio preview. Live conversation is disconnected.")}</p>
+  <div class="identity-field">${energyCore(demoState)}</div>
+  <h2 id="state-title" aria-live="polite">${stateLabel(demoState)}</h2>
+  <div class="modes glass" role="group" aria-label="${t("حالت‌های نمایشی", "Demonstration states")}">${Object.keys(
     voiceStates,
   )
     .map(
@@ -124,15 +161,92 @@ function voice() {
         `<button type="button" data-action="demo-${k}" aria-pressed="${k === demoState}">${stateLabel(k)}</button>`,
     )
     .join("")}</div>
-  ${button("mic", icon("mic") + t("بررسی میکروفون", "Check microphone"), "mic-check")}
-  <p class="notice" role="status">${safe(micState)}</p></section>`;
+  <div class="signal-meter" hidden><label>${t("دامنهٔ صدا", "Level")}<meter min="0" max="1" value="0"></meter></label><label>${t("مرکز طیفی نسبی", "Relative spectral centroid")}<meter min="0" max="1" value="0"></meter></label></div><div class="audio-buttons">${button("mic", icon("mic") + t("آزمایش میکروفون", "Test microphone"), "mic-check")}${button("sample", icon("wave") + t("پخش نمونهٔ انگلیسی", "Play voice sample"), "mic-check")}</div>
+  <p class="notice" id="audio-status" role="status">${safe(micState)}</p></section>`;
+}
+function syncVoice() {
+  clearInterval(meterTimer);
+  const stage = app.querySelector(".voice-stage");
+  if (!stage) return;
+  const meters = stage.querySelector(".signal-meter");
+  meters.hidden = signal.mode === "off";
+  if (!meters.hidden) {
+    const elements = meters.querySelectorAll("meter");
+    meterTimer = setInterval(() => {
+      const levels = signal.read();
+      elements.forEach((m, i) => (m.value = levels[i]));
+    }, 100);
+  }
+  stage.dataset.state = demoState;
+  stage.querySelector(".portrait").dataset.state = demoState;
+  head?.setState(demoState);
+  stage.querySelector("#state-title").textContent = t(...voiceStates[demoState]);
+  for (const b of stage.querySelectorAll(".modes button"))
+    b.setAttribute("aria-pressed", String(b.dataset.action === "demo-" + demoState));
+  stage.querySelector("#audio-status").textContent = micState;
+  for (const [action, mode, ico, off] of [
+    ["mic", "mic", "mic", t("آزمایش میکروفون", "Test microphone")],
+    ["sample", "sample", "wave", t("پخش نمونهٔ انگلیسی", "Play voice sample")],
+  ]) {
+    const b = stage.querySelector('[data-action="' + action + '"]');
+    b.innerHTML = icon(ico) + (signal.mode === mode ? t("توقف", "Stop") : off);
+    b.setAttribute("aria-pressed", String(signal.mode === mode));
+  }
+}
+function workspaceItems() {
+  if (tab === "projects") return projects.map((name) => ({ name }));
+  const items =
+    {
+      history: savedDrafts,
+      memory: notes,
+      files: resources,
+      gallery: resources.filter((f) => f.url),
+    }[tab] || [];
+  return items.filter((f) => !activeProject || f.project === activeProject);
+}
+function listItems() {
+  const all = workspaceItems();
+  const rows = all
+    .map((item, i) => ({ item, i }))
+    .filter(({ item }) => item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+  if (!rows.length)
+    return `<p class="empty">${query ? t("موردی پیدا نشد.", "No matches.") : t("این بخش در نشست فعلی خالی است.", "This section is empty in this session.")}</p>`;
+  return rows
+    .map(
+      ({ item, i }) =>
+        `<div class="work-row">${item.url ? `<img src="${item.url}" alt="">` : icon(glyph[tab])}<bdi>${safe(item.name)}</bdi>${tab === "history" || tab === "projects" ? button("open-item-" + i, icon("arrow") + t("باز کردن", "Open"), "outline") : ""}</div>`,
+    )
+    .join("");
 }
 function space() {
+  const add = tab === "projects" || tab === "memory";
   return (
     title("workspace") +
-    `<section class="surface stack"><div class="controls"><div class="seg">${["history", "projects", "memory", "files", "gallery"].map((k) => button("tab-" + k, label(k), tab === k ? "on" : "")).join("")}</div>
- <label class="field">${icon("search")}<input type="search" id="search" aria-label="${t("جست‌وجو", "Search")}" placeholder="${t("جست‌وجو در این بخش", "Search this section")}"></label></div>
- <div class="empty">${icon(glyph[tab])}<h2>${label(tab)}</h2><p id="results">${t("داده‌های فضای کار در این پیش‌نمایش بارگذاری نمی‌شوند.", "Workspace data is unavailable in this preview.")}</p></div></section>`
+    `<section class="surface stack"><div class="seg">${["history", "projects", "memory", "files", "gallery"].map((k) => button("tab-" + k, label(k), tab === k ? "on" : "")).join("")}</div>
+ <h2>${label(tab)}</h2><p class="sub">${t("محتوای محلی این نشست با خروج پاک می‌شود.", "Local session content clears on sign-out.")}</p>
+ <div class="controls"><label class="field">${icon("search")}<input type="search" id="search" aria-label="${t("جست‌وجو", "Search")}" value="${safe(query)}" placeholder="${t("جست‌وجو", "Search")}"></label>
+ <select id="project-filter" aria-label="${t("پروژهٔ انتخابی", "Active project")}"><option value="">${t("همهٔ پروژه‌ها", "All projects")}</option>${projects.map((n) => `<option ${n === activeProject ? "selected" : ""}>${safe(n)}</option>`).join("")}</select></div>
+ ${add ? `<div class="controls"><label class="field"><input id="item-name" dir="auto" maxlength="500" placeholder="${tab === "projects" ? t("نام پروژه", "Project name") : t("یادداشت حافظه", "Memory note")}" aria-label="${label(tab)}"></label>${button("add-item", icon("layers") + t("افزودن", "Add"))}</div>` : ""}
+ ${["files", "gallery"].includes(tab) ? `<input type="file" id="workspace-file" multiple hidden ${tab === "gallery" ? 'accept="image/png,image/jpeg,image/webp"' : ""}>${button("pick-file", icon("attach") + t("انتخاب فایل محلی", "Choose local file"))}` : ""}
+ <div id="results">${listItems()}</div></section>`
+  );
+}
+function monitor() {
+  const cards = [
+    [t("پردازش تصویر", "Renderer"), lastPortrait?.renderer ?? "—"],
+    [t("ذرات رسم‌شده", "Drawn particles"), lastPortrait?.points ?? "—"],
+    [
+      t("میکروفون مرورگر", "Microphone API"),
+      navigator.mediaDevices?.getUserMedia
+        ? t("در دسترس", "Available")
+        : t("در دسترس نیست", "Unavailable"),
+    ],
+  ];
+  return (
+    title("monitor") +
+    `<section class="surface stack"><h2>${t("زمان هر فریم مرورگر", "Browser frame interval")}</h2><p class="sub">${t("اندازه‌گیری زنده در همین زبانه", "Live measurements from this tab")}</p>
+ <div class="instrument" id="scope"><div class="split"><output dir="auto">—</output><button class="outline" type="button" aria-pressed="false">${t("مکث", "Pause")}</button></div><canvas tabindex="0" aria-label="${t("نمودار زمان فریم؛ برای مرور از کلیدهای جهت استفاده کنید.", "Frame interval chart. Inspect with arrow keys.")}"></canvas><p class="trace-detail"></p></div>
+ <div class="readouts">${cards.map(([k, v]) => `<div><span>${k}</span><bdi>${safe(v)}</bdi></div>`).join("")}</div></section>`
   );
 }
 function plans() {
@@ -152,19 +266,35 @@ function admin() {
 function shell() {
   const creator = session?.role === "creator" || review;
   return `<div class="shell"><button class="scrim ${drawer ? "open" : ""}" aria-label="${t("بستن منو", "Close menu")}" data-action="menu"></button><aside class="rail glass ${drawer ? "open" : ""}">${button("menu", icon("close"), "iconbtn drawerclose")}${brand()}
- <nav class="navgroup"><small>${t("محیط شخصی", "Personal space")}</small>${["main", "voice", "workspace"].map(nav).join("")}</nav>
+ <nav class="navgroup"><small>${t("محیط شخصی", "Personal space")}</small>${["main", "voice", "workspace", "monitor"].map(nav).join("")}</nav>
  <nav class="navgroup"><small>${t("حساب کاربری", "Account")}</small>${nav("plans")}${creator ? nav("admin") : ""}</nav>
  <div class="railbottom"><span class="pill">${icon("user")}${review ? previewLabel() : `<bdi>${safe(session.name)}</bdi>`}</span>${button("logout", icon("logout") + t("خروج", "Sign out"), "navbtn")}</div></aside>
  <main class="main"><header class="top"><div class="topstart">${button("menu", icon("menu"), "iconbtn mobilemenu")}</div><strong class="topname">${productName()}</strong><div class="topactions"><span class="pill"><i class="dot"></i>${previewLabel()}</span>${language()}</div></header>
- <div class="page">${{ main: home, voice, workspace: space, plans, admin }[page]()}${notice()}</div>
+ <div class="page">${{ main: home, voice, workspace: space, monitor, plans, admin }[page]()}${notice()}</div>
  <footer class="footnote"><span class="en">SHADVERSE ©</span>${attribution()}</footer></main></div>`;
 }
 function render() {
+  const old = app.querySelector(".portrait");
+  if (old?.dataset.renderer)
+    lastPortrait = { renderer: old.dataset.renderer, points: old.dataset.points };
+  head?.close();
+  head = null;
+  stopScope?.();
+  stopScope = null;
   document.title = productName();
   document.documentElement.lang = lang;
   document.documentElement.dir = lang === "fa" ? "rtl" : "ltr";
-  app.innerHTML = page === "login" ? gate() : shell();
+  const optics = `<svg class="optics-defs" aria-hidden="true" width="0" height="0"><defs><filter id="jarvis-lens" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feImage href="${lensMap}" width="100%" height="100%" preserveAspectRatio="none" result="normals"/><feDisplacementMap in="SourceGraphic" in2="normals" scale="19" xChannelSelector="R" yChannelSelector="G"/></filter></defs></svg>`;
+  app.innerHTML = optics + (page === "login" ? gate() : shell());
 
+  const canvas = app.querySelector(".portrait canvas");
+  if (canvas) {
+    head = mountHead(canvas, () => signal.read());
+    head.setState(page === "voice" ? demoState : "idle");
+  }
+  const scope = app.querySelector("#scope");
+  if (scope) stopScope = mountScope(scope, lang === "fa");
+  if (page === "voice") syncVoice();
   for (const [action, fa, en] of [
     ["attach", "افزودن پیوست", "Attach files"],
     ["reveal", "نمایش یا پنهان کردن گذرواژه", "Show or hide password"],
@@ -227,6 +357,7 @@ app.addEventListener("submit", async (event) => {
       activation = false;
       feedback = t("حساب فعال شد. اکنون وارد شوید.", "Account activated. Sign in to continue.");
     } else {
+      clearWorkspace();
       session = result;
       review = false;
       page = "main";
@@ -257,13 +388,52 @@ app.addEventListener("click", async (event) => {
     input.setSelectionRange(draft.length, draft.length);
     return;
   }
+  if (action === "save-draft") {
+    if (draft.trim()) {
+      savedDrafts.push({ name: draft, project: activeProject });
+      feedback = t("پیش‌نویس در این نشست ذخیره شد.", "Draft saved in this session.");
+    } else feedback = t("ابتدا متن پیام را بنویسید.", "Write a message first.");
+    render();
+    return;
+  }
+  if (action === "add-item") {
+    const name = app.querySelector("#item-name").value.trim();
+    if (!name) return;
+    if (tab === "projects") {
+      if (!projects.includes(name)) projects.push(name);
+      activeProject = name;
+    } else notes.push({ name, project: activeProject });
+    query = "";
+    render();
+    return;
+  }
+  if (action === "pick-file") {
+    app.querySelector("#workspace-file").click();
+    return;
+  }
+  if (action.startsWith("open-item-")) {
+    const item = workspaceItems()[Number(action.slice(10))];
+    if (!item) return;
+    if (tab === "projects") {
+      activeProject = item.name;
+      tab = "files";
+    } else {
+      draft = item.name;
+      page = "main";
+    }
+    query = "";
+    render();
+    return;
+  }
   if (action === "attach") {
     app.querySelector("#file")?.click();
     return;
   }
   if (action.startsWith("demo-") && Object.hasOwn(voiceStates, action.slice(5))) {
+    stopAudio();
+    micState = t("نمایش حرکت بدون ورودی صوتی", "Motion demonstration without audio input");
     demoState = action.slice(5);
-    render();
+    syncVoice();
     app.querySelector('[data-action="' + action + '"]')?.focus({ preventScroll: true });
     return;
   }
@@ -285,6 +455,8 @@ app.addEventListener("click", async (event) => {
         return;
       }
     }
+    stopAudio();
+    clearWorkspace();
     page = "login";
     session = null;
     review = false;
@@ -295,33 +467,54 @@ app.addEventListener("click", async (event) => {
     micState = "";
     demoState = "idle";
     reveal = false;
-  } else if (action === "mic") {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      micState = t(
-        "دسترسی به میکروفون به اتصال امن نیاز دارد.",
-        "Microphone access requires a secure context.",
-      );
-    } else {
-      control.disabled = true;
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-        micState = t(
-          "میکروفون در دسترس است. بررسی پایان یافت.",
-          "Microphone available. Check complete.",
-        );
-      } catch {
-        micState = t("دسترسی به میکروفون ممکن نشد.", "Microphone access is unavailable.");
-      }
+  } else if (action === "mic" || action === "sample") {
+    const stopping = signal.mode === action;
+    stopAudio();
+    if (stopping) {
+      demoState = "idle";
+      micState = t("صدا متوقف شد.", "Audio stopped.");
+      syncVoice();
+      return;
     }
+    const epoch = voiceEpoch;
+    control.disabled = true;
+    try {
+      if ((await signal.start(action)) && epoch === voiceEpoch) {
+        demoState = action === "mic" ? "listening" : "speaking";
+        micState =
+          action === "mic"
+            ? t(
+                "ورودی زندهٔ میکروفون؛ پردازش فقط در مرورگر",
+                "Live microphone input, processed in this browser",
+              )
+            : t(
+                "پخش نمونهٔ ازپیش‌ساخته؛ حرکت هماهنگ با صدا",
+                "Prerecorded demonstration, motion driven by playback",
+              );
+      }
+    } catch {
+      if (epoch === voiceEpoch) {
+        demoState = "error";
+        micState = t("دسترسی به صدا ممکن نشد.", "Audio is unavailable.");
+      }
+    } finally {
+      control.disabled = false;
+      if (epoch === voiceEpoch) syncVoice();
+    }
+    return;
   } else if (action.startsWith("tab-")) {
+    stopAudio();
+    query = "";
     tab = action.slice(4);
     page = "workspace";
     drawer = false;
   } else if (action.startsWith("remove-")) files.splice(Number(action.slice(7)), 1);
   else if (["month", "year"].includes(action)) period = action;
-  else if (["main", "voice", "workspace", "plans", "admin"].includes(action)) {
+  else if (["main", "voice", "workspace", "monitor", "plans", "admin"].includes(action)) {
     if (action === "admin" && !review && session?.role !== "creator") return;
+    stopAudio();
+    demoState = "idle";
+    micState = "";
     page = action;
     drawer = false;
     users = null;
@@ -341,15 +534,45 @@ app.addEventListener("click", async (event) => {
 });
 app.addEventListener("input", (event) => {
   if (event.target.id === "draft") draft = event.target.value;
-  if (event.target.id === "search")
-    app.querySelector("#results").textContent = event.target.value
-      ? t("داده‌ای برای جست‌وجو در دسترس نیست.", "No workspace data available to search.")
-      : t(
-          "داده‌های فضای کار در این پیش‌نمایش بارگذاری نمی‌شوند.",
-          "Workspace data is unavailable in this preview.",
-        );
+  if (event.target.id === "search") {
+    query = event.target.value;
+    app.querySelector("#results").innerHTML = listItems();
+  }
 });
-app.addEventListener("change", (event) => {
+app.addEventListener("change", async (event) => {
+  if (event.target.id === "project-filter") {
+    activeProject = event.target.value;
+    render();
+    return;
+  }
+  if (event.target.id === "workspace-file") {
+    const epoch = workspaceEpoch,
+      project = activeProject;
+    for (const f of Array.from(event.target.files)) {
+      let url = null;
+      if (
+        ["image/png", "image/jpeg", "image/webp"].includes(f.type) &&
+        f.size <= 12 * 1024 * 1024
+      ) {
+        try {
+          const bitmap = await createImageBitmap(f, {
+            resizeWidth: 160,
+            resizeHeight: 160,
+            resizeQuality: "medium",
+          });
+          const thumb = document.createElement("canvas");
+          thumb.width = thumb.height = 160;
+          thumb.getContext("2d").drawImage(bitmap, 0, 0);
+          bitmap.close();
+          url = thumb.toDataURL("image/webp");
+        } catch {}
+      }
+      if (epoch !== workspaceEpoch) return;
+      resources.push({ name: f.name, project, url });
+    }
+    render();
+    return;
+  }
   if (event.target.id === "file") {
     files.push(...event.target.files);
     render();
@@ -363,6 +586,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 function showSession(user) {
+  clearWorkspace();
   session = user;
   page = "main";
   render();
@@ -375,3 +599,31 @@ render();
 
 if (!standalone && window.isSecureContext && "serviceWorker" in navigator)
   navigator.serviceWorker.register("./sw.js").catch(() => {});
+
+function suspendAudio() {
+  stopAudio();
+  if (page === "voice") {
+    demoState = "idle";
+    micState = "";
+    syncVoice();
+  }
+}
+window.addEventListener("pagehide", suspendAudio);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) suspendAudio();
+});
+
+app.addEventListener("pointerover", (event) => {
+  const pane = event.target.closest?.(".glass,.surface");
+  if (
+    !pane ||
+    pane.contains(event.relatedTarget) ||
+    matchMedia("(prefers-reduced-motion: reduce)").matches
+  )
+    return;
+  const bounds = pane.getBoundingClientRect();
+  pane.style.setProperty(
+    "--key-x",
+    Math.round((100 * (event.clientX - bounds.left)) / bounds.width) + "%",
+  );
+});

@@ -6,9 +6,11 @@ This feature adds the Persian-first product shell and application login for Crea
 
 Download [the portable preview](review/SHADVERSE-JARVIS-preview.zip), extract the HTML file, and open it in a browser. Choose «مشاهدهٔ پیش‌نمایش» on the login screen. Use the right navigation rail or the menu on mobile to open the voice assistant, workspace, subscriptions and Creator administration. The EN button switches to English. The portable version runs locally and uses embedded fonts and artwork. Account operations require the server below.
 
-[Phase 03.1 and 03.2 comparison](review/before-after.jpg) · [Contact sheet](review/contact-sheet.jpg) · [Full-resolution browser captures](review/) · [Persian centering and typography](review/persian-alignment.md) · [Mobile rendering measurements](review/mobile-performance.md)
+[Phase 03.2 and 03.3 comparison](review/before-after.jpg) · [Contact sheet](review/contact-sheet.jpg) · [Full-resolution browser captures](review/) · [Persian centering and typography](review/persian-alignment.md) · [Mobile rendering measurements](review/mobile-performance.md)
 
-The login, assistant and voice screens use the OFL-licensed Vazirmatn variable font and locally rendered artwork. On the voice screen, select any state to change the core’s lighting and movement. The microphone button runs a separate availability check.
+The assistant uses a mechanical SHADVERSE chassis with a segmented optical visor and eight materials. Open the voice screen to inspect five motion states. Microphone testing requests permission and measures local input until stopped. The English sample plays an offline clip through the same analyser. The standalone HTML works in a JavaScript-capable browser. Web Audio microphone access requires browser permission and a secure context; phone file viewers vary in their ability to execute HTML. For a phone browser, the same standalone file can be served as static HTML over an approved private HTTPS origin.
+
+[Browser recording](review/living-identity.mp4) · [Geometry, rendering research and licenses](RENDERING.md)
 
 ## Run the authenticated preview locally
 
@@ -39,10 +41,11 @@ Use `node manage.mjs invite` privately to issue a one-use member code valid for 
 | Screen         | Implemented here                                                                                                   | Requires later integration                                                              |
 | -------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
 | Gate           | Username/password sign-in, one-time code activation, secure cookie, server-side logout, Persian and English errors | Production HTTPS proxy cutover                                                          |
-| Assistant      | Refractive glass core, prompt starters, local text drafts, attachment selection and removal, connection status     | In-shell inference, model choices, uploading and chat history                           |
-| Voice          | Five labeled visual demonstrations and a microphone availability check that immediately releases all tracks        | Speech recognition, voice model and playback                                            |
-| Workspace      | History, projects, memory, files and gallery navigation, search field with explicit availability feedback          | Tenant-authorized storage, search and retrieval                                         |
+| Assistant      | Mechanical portrait, prompt starters, saving and reopening local drafts, attachment controls, connection status    | In-shell inference, model choices, uploading and chat history                           |
+| Voice          | Five interpolated states, live local mic analysis, analysed English audio sample and stop controls                 | Speech recognition, live assistant audio and turn-taking                                |
+| Workspace      | Session projects, memory notes, draft history, local file inventory, image thumbnails and search                   | Tenant-authorized storage, search and retrieval                                         |
 | Subscription   | Free, Pro and Ultra views, monthly and annual terms, usage and quota section                                       | Entitlement enforcement, pricing, metering and purchases                                |
+| Monitoring     | Live browser frame interval chart, pause, keyboard inspection, last renderer and point count                       | Production monitoring and billing telemetry                                             |
 | Administration | Real Creator-only account directory, operator CLI for codes and session revocation                                 | Web management of roles, subscriptions, model policies, costs, audit and emergency stop |
 
 The public tour shows the layout of administration with no account records. Drafts and attachment selections live in page memory. PWA assets include installation metadata, local icons and an offline navigation fallback. The service worker stores no application data. Captures use Chromium at desktop and touch-enabled mobile viewport sizes. Physical iOS, Android and Windows installation and real voice conversations require separate testing.
@@ -61,7 +64,10 @@ After building, run the following from this directory. The visual suite expects 
 
 ```bash
 node --test tests/auth.test.mjs
+node tests/workspace.mjs
 node tests/visual.mjs
+node tests/mobile-performance.mjs
+node tests/record-review.mjs
 # Optional packaging step (Python, Pillow, DejaVu Sans)
 python3 tests/package-review.py
 ```

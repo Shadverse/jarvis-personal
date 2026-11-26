@@ -363,67 +363,6 @@ form label {
   text-decoration: underline;
   text-underline-offset: 5px;
 }
-.energy {
-  --size: clamp(245px, 29vw, 418px);
-  width: var(--size);
-  height: calc(var(--size)*1.06);
-  position: relative;
-  isolation: isolate;
-  pointer-events: none;
-}
-.levitate {
-  width: 88%;
-  aspect-ratio: 1;
-  position: absolute;
-  left: 6%;
-  top: 1%;
-  animation: float 7s ease-in-out infinite;
-  z-index: 1;
-}
-.jewel {
-  display: block;
-  height: 100%;
-  background: url("./art/prism.webp") center/contain no-repeat;
-  transform: rotate(-13deg);
-}
-.aura {
-  position: absolute;
-  inset: -17%;
-  background:
-    radial-gradient(ellipse at 45% 43%, #7d51ff29, transparent 53%),
-    radial-gradient(ellipse at 64% 44%, #2470f326, transparent 50%);
-}
-.reflection {
-  position: absolute;
-  bottom: 3%;
-  left: 14%;
-  width: 72%;
-  height: 8%;
-  border-radius: 50%;
-  background: radial-gradient(ellipse, #dad0ff94, #8661fa87 12%, #7147d036 42%, transparent 70%);
-  filter: blur(3px);
-  transform: rotate(-4deg);
-}
-.energy:after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 9% 33%, #d3bdffa8 0 1px, transparent 2px),
-    radial-gradient(circle at 79% 3%, #b6d3ff88 0 1px, transparent 2px),
-    radial-gradient(circle at 89% 70%, #d3bdff88 0 1px, transparent 2px),
-    radial-gradient(circle at 2% 58%, #9672c8a8 0 1px, transparent 1.5px);
-}
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0);
-  }
-  50% {
-    transform: translateY(-1.5%) rotate(2.5deg) scale(1.028);
-  }
-}
 .shell {
   min-height: 100svh;
   max-width: 1640px;
@@ -1199,34 +1138,6 @@ html[dir="rtl"] [name="password"]:placeholder-shown {
   }
 }
 
-/* A caustic travels inside the stationary glass boundary. */
-.jewel {
-  position: relative;
-}
-.jewel::after {
-  content: "";
-  position: absolute;
-  inset: 8%;
-  border-radius: 50%;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse at 37% 43%, #b19fff27, transparent 28%),
-    linear-gradient(118deg, transparent 39%, #c6ccff1c 48%, transparent 54%);
-  mask-image: radial-gradient(circle, #000 38%, transparent 70%);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .energy:not(.still):not([data-state="disconnected"]) .jewel::after {
-    animation: caustic 8s ease-in-out infinite alternate;
-  }
-}
-@keyframes caustic {
-  from {
-    transform: rotate(-18deg) scale(0.95);
-  }
-  to {
-    transform: rotate(24deg) scale(1.04);
-  }
-}
 @media (max-width: 720px) {
   .top {
     position: sticky;
@@ -1261,4 +1172,322 @@ html[dir="rtl"] [name="password"]:placeholder-shown {
     gap: 5px;
     padding-inline: 8px;
   }
+}
+
+/* The point cloud is the luminous subject. Optical surfaces pick up its
+   cool key and warm rim rather than washing the text in a uniform tint. */
+:root {
+  --ink: #faf6ff;
+  --muted: #d7d3e6;
+  --line: #adaaff42;
+  --violet: #ecd6ff;
+}
+.glass,
+.surface,
+.instrument {
+  background: linear-gradient(132deg, #9da6ff29, #15142896 32%, #111527b0 74%, #35689536);
+  border-color: #b9aafa45;
+  box-shadow:
+    inset 0 1px #fcf6ffa3,
+    inset 1px 0 2px #db9aff4a,
+    inset -1px -1px 2px #72befe70,
+    0 15px 40px #01030d74;
+}
+.glass::before {
+  opacity: 0.36;
+}
+.rail {
+  background: linear-gradient(143deg, #252645be, #18152bb8 48%, #17283eb0);
+}
+.navbtn.selected,
+.seg .on,
+.modes button[aria-pressed="true"] {
+  background: linear-gradient(103deg, #4f56b254, #a54be45e);
+  color: white;
+  box-shadow:
+    inset -2px 0 #e9a7ff,
+    inset 0 1px #d4b2ff3d;
+}
+.navbtn.selected .ico,
+.tileicon,
+.shortcut .ico {
+  color: #bcdbff;
+}
+.field {
+  background: #0b0c1d99;
+  border-color: #999ac047;
+}
+.field:focus-within,
+.composer:focus-within {
+  border-color: #bf9bff9c;
+}
+.primary,
+.gateform .primary {
+  background: linear-gradient(105deg, #5649a8, #8853b9 53%, #4e548e);
+  border-color: #cdb6ff8c;
+}
+.emblem {
+  width: 64px;
+  height: 64px;
+  border-radius: 21px;
+  background: linear-gradient(135deg, #b8bcff69, #50408344 47%, #8e8cf737);
+  box-shadow:
+    inset 0 1px #fff9,
+    inset 0 -2px #78c5fe52,
+    0 5px 22px #9f49ef30;
+}
+.emblem img {
+  width: 45px;
+  height: 45px;
+  border-radius: 14px;
+}
+.identity-field {
+  isolation: isolate;
+  position: relative;
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+.identity-field::before {
+  content: "";
+  position: absolute;
+  inset: 2% 2% 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 48% 43%, #8441e138, transparent 48%),
+    radial-gradient(ellipse at 58% 62%, #2579ff22, transparent 45%);
+}
+.portrait {
+  position: relative;
+  width: 100%;
+  height: clamp(154px, 25vh, 255px);
+  isolation: isolate;
+}
+.portrait canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.greeting {
+  position: relative;
+}
+.greeting .identity-field {
+  border-bottom: 1px solid #b9baff2e;
+  background: linear-gradient(90deg, transparent, #1b14324d 30%, #14223955 69%, transparent);
+  margin-bottom: 9px;
+}
+.greeting h1 {
+  font-size: clamp(26px, 2.45vw, 36px);
+}
+.voice-stage .portrait {
+  height: clamp(230px, 39vh, 400px);
+}
+.voice-stage .identity-field {
+  margin: 12px 0 4px;
+  border-block: 1px solid #c2b6ff28;
+  background: radial-gradient(ellipse at center, #28183d77, #0a102040 56%, transparent 78%);
+}
+.identity-field::after {
+  content: "";
+  position: absolute;
+  inset: 10% 12%;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(to bottom, #91bcff63 0 1px, transparent 1px 13px) left center/5px 65%
+      no-repeat,
+    repeating-linear-gradient(to bottom, #d7a3ff52 0 1px, transparent 1px 13px) right center/5px 65%
+      no-repeat;
+}
+.audio-buttons,
+.draft-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.audio-buttons .mic-check[aria-pressed="true"] {
+  border-color: #6de1ff;
+  color: #b3fbff;
+}
+.draft-actions {
+  justify-content: flex-start;
+}
+.draft-actions .textbtn {
+  margin: 0;
+  min-height: 44px;
+  padding: 4px 0;
+  font-size: 14px;
+}
+.draft-actions .ico {
+  width: 16px;
+}
+.voice-stage > .sub {
+  max-width: 44ch;
+}
+.instrument {
+  border-radius: 18px;
+  padding: 15px 18px;
+  background: linear-gradient(145deg, #132139b8, #15152be6);
+}
+.instrument output {
+  font-size: 21px;
+  font-weight: 650;
+  color: #b9efff;
+}
+.instrument canvas {
+  width: 100%;
+  height: 150px;
+  display: block;
+  direction: ltr;
+  touch-action: pan-y;
+}
+.trace-detail {
+  font-size: 14px;
+  color: #c8cfe5;
+}
+.readouts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.readouts > div {
+  display: grid;
+  text-align: center;
+  padding: 12px 5px;
+  gap: 3px;
+  border-top: 1px solid #b7aeff4a;
+}
+.readouts span {
+  font-size: 14px;
+  color: #ddd4ee;
+}
+.readouts bdi {
+  color: #c0efff;
+}
+.work-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 54px;
+  padding: 8px;
+  border-bottom: 1px solid #d8ccff27;
+}
+.work-row bdi {
+  flex: 1;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.work-row img {
+  width: 54px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 7px;
+}
+.controls select {
+  min-height: 44px;
+  border: 1px solid #aea1d54a;
+  border-radius: 10px;
+  background: #17172a;
+  padding-inline: 8px;
+  max-width: 100%;
+}
+@media (max-width: 720px) {
+  .portrait {
+    height: clamp(154px, 23svh, 196px);
+  }
+  .voice-stage .portrait {
+    height: clamp(225px, 34svh, 318px);
+  }
+  .voice-stage .identity-field {
+    margin: 10px 0 4px;
+  }
+  .voice-stage .mic-check {
+    margin-top: 10px;
+  }
+  .readouts {
+    gap: 5px;
+  }
+  .readouts span {
+    font-size: 13px;
+  }
+  .emblem {
+    height: 55px;
+    width: 55px;
+  }
+}
+.optics-defs {
+  position: absolute;
+  pointer-events: none;
+  overflow: hidden;
+}
+.glass::before {
+  filter: url(#jarvis-lens);
+  opacity: 0.46;
+}
+.glass::after,
+.surface::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background:
+    radial-gradient(ellipse at var(--key-x, 29%) 0%, #fff 0, #d8dcff90 10%, transparent 45%),
+    linear-gradient(126deg, #e8b8ff75, transparent 32%, #63c9ff66 76%, #c6b5fc5c);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
+.voice-stage .identity-field {
+  border-radius: 34px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 66%, #401c544a, transparent 56%),
+    linear-gradient(125deg, #a4b6fc16, #15152a5c 44%, #1b294135);
+  border: 1px solid #b9c0f134;
+  box-shadow:
+    inset 0 1px #e8d9ff4a,
+    inset 0 -1px #73bcff48,
+    0 12px 37px #0c09284d;
+}
+.voice-stage .identity-field::before {
+  background:
+    radial-gradient(ellipse at 40% 40%, #8f49ed29, transparent 45%),
+    radial-gradient(ellipse at 60% 48%, #249dea26, transparent 42%);
+}
+@media (max-width: 720px) {
+  .voice-stage .identity-field {
+    border-radius: 26px;
+  }
+}
+.signal-meter {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+.signal-meter[hidden] {
+  display: none;
+}
+.signal-meter label {
+  display: grid;
+  font-size: 13px;
+  color: #d8dcf4;
+  gap: 3px;
+}
+.signal-meter meter {
+  width: 95px;
+  height: 9px;
+  direction: ltr;
+}
+.signal-meter meter::-webkit-meter-bar {
+  background: #171a30;
+  border: 0;
+}
+.signal-meter meter::-webkit-meter-optimum-value {
+  background: linear-gradient(90deg, #aa73ff, #7deeff);
 }

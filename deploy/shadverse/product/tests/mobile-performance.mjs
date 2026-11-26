@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 const requireUi = createRequire(new URL("../../../../ui/package.json", import.meta.url));
 const browser = await requireUi("playwright").chromium.launch({
+  args: ["--enable-unsafe-swiftshader"],
   executablePath: process.env.CHROMIUM || "/usr/bin/chromium",
 });
 const rows = [];
@@ -43,6 +44,8 @@ try {
       if (scene === "Main") await page.click("[data-action=review]");
       if (scene === "Voice") await page.click(".voicebtn");
       const result = await page.evaluate(async (duration) => {
+        const head = document.querySelector(".portrait");
+        const first = Number(head?.dataset.frames || 0);
         const frameTimes = [],
           tasks = [];
         const observer = new PerformanceObserver((list) => tasks.push(...list.getEntries()));
@@ -62,11 +65,13 @@ try {
           mean: (frameTimes.length * 1000) / (last - start),
           p95: sorted[Math.ceil(0.95 * sorted.length) - 1],
           long: tasks.length,
-          motion: getComputedStyle(document.querySelector(".levitate")).animationName,
+          renderer: head?.dataset.renderer ?? "DOM",
+          points: head?.dataset.points ?? 0,
+          draws: ((Number(head?.dataset.frames || 0) - first) * 1000) / (last - start),
         };
       }, duration);
       rows.push(
-        `| ${width} × ${height} | ${scene} | ${result.motion} | ${result.frames} | ${result.mean.toFixed(1)} | ${result.p95.toFixed(1)} ms | ${result.long} |`,
+        `| ${width} × ${height} | ${scene} | ${result.renderer} | ${result.points} | ${result.draws.toFixed(1)} | ${result.frames} | ${result.mean.toFixed(1)} | ${result.p95.toFixed(1)} ms | ${result.long} |`,
       );
     }
     await context.close();
@@ -77,28 +82,36 @@ try {
   );
   const page = await fallback.newPage();
   await page.goto("http://localhost:3000/review");
-  assert.equal(
-    await page.locator(".levitate").evaluate((el) => getComputedStyle(el).animationName),
-    "none",
-  );
-  assert.equal(
-    await page.locator(".jewel").evaluate((el) => getComputedStyle(el, "::after").animationName),
-    "none",
-  );
+  await page.click("[data-action=review]");
+  assert.ok(Number(await page.locator(".portrait").getAttribute("data-points")) < 56000);
   await fallback.close();
+  const portable = await browser.newContext({ reducedMotion: "reduce" });
+  await portable.addInitScript(() => {
+    const context = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (key, ...args) {
+      return key === "webgl2" ? null : context.call(this, key, ...args);
+    };
+  });
+  const cpu = await portable.newPage();
+  await cpu.goto("http://localhost:3000/review");
+  await cpu.click("[data-action=review]");
+  assert.equal(await cpu.locator(".portrait").getAttribute("data-renderer"), "Canvas 2D");
+  await portable.close();
+  const session = await browser.newBrowserCDPSession();
+  const { gpu } = await session.send("SystemInfo.getInfo");
   const report = `# Mobile rendering measurements
 
-Headless Chromium ${browser.version()} on Linux. Each profile used a fresh browser context, touch emulation, the indicated device pixel ratio, default motion settings and 4× CPU throttling. The preview server was on loopback. The measurements describe this host. Physical device compositing, thermal performance, battery use, Safari and cellular load times require device testing.
+Headless Chromium ${browser.version()} on Linux. Each profile used a fresh browser context, touch emulation, the indicated device pixel ratio, default motion settings and 4× CPU throttling. Graphics backend: ${gpu.auxAttributes.glRenderer}. The preview server was on loopback. The measurements describe this host. Physical device compositing, thermal performance, battery use, Safari and cellular load times require device testing.
 
 ${loads.join("\n")}
 
 Each row samples requestAnimationFrame callbacks for ${duration / 1000} seconds after navigation. Rate means callbacks per elapsed second. P95 is the 95th percentile callback interval. Long tasks use the browser's 50 ms threshold. These are main-thread timing measurements. They do not measure frames presented by the physical display.
 
-| Viewport | Screen | CSS motion | Callbacks | Rate/s | P95 interval | Long tasks |
-| --- | --- | --- | ---: | ---: | ---: | ---: |
+| Viewport | Screen | Renderer | Points at end | Portrait draws/s | Callbacks | Rate/s | P95 interval | Long tasks |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 ${rows.join("\n")}
 
-The core uses a pre-rendered refractive volume and CSS transform animation. Reduced motion disables movement. The same static rendering is used for data saver, two or fewer logical processors, or at most 2 GiB of reported device memory. A two-processor browser override verified the static fallback. The visual suite verifies reduced motion across all five demonstration states at all three viewports.
+Portrait draws/s counts completed JavaScript submissions to the graphics API during the measurement. Login uses DOM and glass surfaces. The renderer reduces particle count under sustained frame delays, caps pixel ratio, suspends hidden tabs, and holds the pose for reduced motion. The suite also exercised the two-processor quality tier and a forced Canvas 2D fallback. Physical mobile GPU presentation, battery and thermal behavior remain unmeasured.
 
 Run \`node tests/mobile-performance.mjs\` from the product directory with the preview running on port 3000.
 `;

@@ -34,12 +34,12 @@ with ZipFile(review / "SHADVERSE-JARVIS-preview.zip", "w") as archive:
 
 # Assemble both contact sheets at identical scale from the committed baseline
 # and freshly rendered captures, without relying on an untracked local file.
-baseline = "473964288588248bb7684696b88992453466ebe4"
+baseline = "7ea34b8d3d1e39714ea243f5bcc778c064ae71cc"
 source = f"{baseline}:deploy/shadverse/product/review/contact-sheet.jpg"
 before = Image.open(BytesIO(check_output(["git", "show", source], cwd=root)))
 comparison = Image.new("RGB", (2424, 1594), "#0d0c16")
 labels = ImageDraw.Draw(comparison)
-for x, label, image in [(0, "PHASE 03.1  /  BEFORE", before), (1224, "PHASE 03.2  /  AFTER", sheet)]:
+for x, label, image in [(0, "PHASE 03.2  /  BEFORE", before), (1224, "PHASE 03.3  /  AFTER", sheet)]:
     labels.text((x + 22, 18), label, font=font, fill="#e7dcff")
     comparison.paste(image, (x, 64))
 comparison.save(review / "before-after.jpg", quality=92)

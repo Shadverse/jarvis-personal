@@ -19,7 +19,14 @@ await build({
   bundle: true,
   minify: true,
   format: "iife",
-  loader: { ".woff2": "file", ".webp": "dataurl" },
+  loader: {
+    ".woff2": "file",
+    ".webp": "dataurl",
+    ".png": "dataurl",
+    ".points": "binary",
+    ".mesh": "binary",
+    ".ogg": "binary",
+  },
   assetNames: "assets/[name]",
 });
 let css = await readFile("dist/style.css", "utf8");

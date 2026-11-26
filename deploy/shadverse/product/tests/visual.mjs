@@ -12,6 +12,7 @@ const output = fileURLToPath(new URL("../review/", import.meta.url));
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM || "/usr/bin/chromium",
+  args: ["--enable-unsafe-swiftshader"],
 });
 let screens = 0;
 try {
@@ -112,25 +113,23 @@ try {
     }
     await nav("voice");
     await snap("voice", true);
-    for (const state of ["listening", "thinking", "speaking", "disconnected", "idle"]) {
+    for (const state of ["listening", "thinking", "speaking", "error", "idle"]) {
       await page.click("[data-action=demo-" + state + "]");
-      assert.equal(await page.locator(".voice-stage .energy").getAttribute("data-state"), state);
+      assert.equal(await page.locator(".voice-stage .portrait").getAttribute("data-state"), state);
       assert.equal(await page.locator(".modes [aria-pressed=true]").count(), 1);
-      assert.equal(
-        await page
-          .locator(".jewel")
-          .evaluate((el) => getComputedStyle(el, "::after").animationName),
-        "none",
-      );
-      assert.equal(
-        await page.locator(".levitate").evaluate((el) => getComputedStyle(el).animationName),
-        "none",
-      );
+      const portrait = page.locator(".portrait");
+      const still = await portrait.getAttribute("data-frames");
+      await page.waitForTimeout(80);
+      assert.equal(await portrait.getAttribute("data-frames"), still);
     }
     await nav("workspace");
     await snap("workspace");
     await page.click("[data-action=tab-gallery]");
     await page.locator("#search").fill("تصویر");
+    await nav("monitor");
+    await snap("monitor", true);
+    await page.locator("#scope button").click();
+    assert.equal(await page.locator("#scope button").getAttribute("aria-pressed"), "true");
     await nav("plans");
     await snap("subscription");
     await page.click("[data-action=year]");
@@ -173,11 +172,33 @@ try {
       return document.fonts.check("16px Vazir") && document.images[0].naturalWidth > 0;
     }),
   );
+  await page.addInitScript(() => {
+    const devices = navigator.mediaDevices;
+    const getStream = devices.getUserMedia.bind(devices);
+    devices.getUserMedia = async (constraints) => {
+      const stream = await getStream(constraints);
+      window.testMicTracks = stream.getAudioTracks();
+      return stream;
+    };
+  });
   await page.goto("http://localhost:3000/review");
   await page.click("[data-action=review]");
   await page.click("nav [data-action=voice]");
   await page.click("[data-action=mic]");
-  await page.getByText("میکروفون در دسترس است. بررسی پایان یافت.").waitFor();
+  await page.waitForFunction(
+    () => document.querySelector("[data-action=mic]")?.getAttribute("aria-pressed") === "true",
+  );
+  await page.waitForFunction(
+    () => Number(document.querySelector(".portrait")?.dataset.amplitude) > 0.005,
+  );
+  await page.click("[data-action=mic]");
+  assert.equal(await page.evaluate(() => window.testMicTracks[0].readyState), "ended");
+  assert.equal(await page.locator("[data-action=mic]").getAttribute("aria-pressed"), "false");
+  await page.click("[data-action=sample]");
+  await page.waitForFunction(
+    () => Number(document.querySelector(".portrait")?.dataset.amplitude) > 0.005,
+  );
+  await page.click("[data-action=sample]");
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
   await page.reload();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
@@ -186,7 +207,7 @@ try {
   await page.getByText("اتصال برقرار نیست").waitFor();
   assert.deepEqual(await page.evaluate(() => caches.keys()), []);
   console.log(
-    "Portable preview, synthetic microphone permission check and offline fallback passed.",
+    "Portable preview, synthetic microphone signal and track release and offline fallback passed.",
   );
 } finally {
   await portableBrowser.close();
