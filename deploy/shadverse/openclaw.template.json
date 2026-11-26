@@ -1,0 +1,73 @@
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "loopback",
+    "port": 18789,
+    "auth": { "mode": "token", "allowTailscale": false },
+    "tailscale": { "mode": "off" },
+    "terminal": { "enabled": false },
+    "cliAgents": { "enabled": false },
+    "nodes": { "pairing": { "autoApproveLocal": false } }
+  },
+  "discovery": { "mdns": { "mode": "off" } },
+  "update": { "channel": "stable", "checkOnStart": false, "auto": { "enabled": false } },
+  "browser": { "enabled": false },
+  "cron": { "enabled": false },
+  "hooks": { "enabled": false },
+  "commands": {
+    "native": false,
+    "nativeSkills": false,
+    "bash": false,
+    "config": false,
+    "mcp": false,
+    "plugins": false,
+    "debug": false,
+    "restart": false
+  },
+  "ui": { "seamColor": "#006B5F", "prefs": { "accent": "#006B5F", "locale": "fa" } },
+  "agents": {
+    "defaults": {
+      "skipBootstrap": true,
+      "userTimezone": "Asia/Tehran",
+      "model": { "primary": "openai/gpt-6-astra", "fallbacks": [] },
+      "models": { "openai/gpt-6-astra": { "agentRuntime": { "id": "openclaw" } } },
+      "compaction": { "memoryFlush": { "enabled": false } }
+    },
+    "entries": {
+      "main": {
+        "skills": [],
+        "identity": { "name": "SHADVERSE JARVIS PERSONAL", "theme": "Creator Exclusive Edition · SHADVERSE ©" }
+      }
+    }
+  },
+  "session": {
+    "dmScope": "per-channel-peer",
+    "reset": { "mode": "none" }
+  },
+  "memory": {
+    "search": {
+      "provider": "none",
+      "fallback": "none",
+      "sources": ["memory"],
+      "rememberAcrossConversations": false
+    }
+  },
+  "tools": {
+    "profile": "minimal",
+    "alsoAllow": ["memory_search", "memory_get"],
+    "deny": ["gateway", "group:runtime", "group:fs", "group:automation"],
+    "gatewayPolicy": { "allow": ["session_status", "memory_search", "memory_get"] },
+    "fs": { "workspaceOnly": true },
+    "exec": { "security": "deny", "ask": "always" },
+    "elevated": { "enabled": false },
+    "agentToAgent": { "enabled": false },
+    "sessions": { "visibility": "agent" }
+  },
+  "plugins": {
+    "allow": ["openai", "memory-core"],
+    "entries": {
+      "codex": { "enabled": false },
+      "memory-core": { "config": { "dreaming": { "enabled": false } } }
+    }
+  }
+}

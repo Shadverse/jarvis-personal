@@ -1,0 +1,20 @@
+[Unit]
+Description=SHADVERSE JARVIS PERSONAL OpenClaw Gateway
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+Environment=OPENCLAW_STATE_DIR=%h/.openclaw-shadverse
+Environment=OPENCLAW_CONFIG_PATH=%h/.openclaw-shadverse/openclaw.json
+Environment=PATH=%h/.local/share/shadverse-openclaw/node/bin:/usr/local/bin:/usr/bin:/bin
+UnsetEnvironment=OPENAI_API_KEY CODEX_API_KEY OPENAI_ADMIN_KEY OPENAI_BASE_URL OPENCLAW_GATEWAY_TOKEN OPENCLAW_GATEWAY_PASSWORD OPENCLAW_AGENT_DIR OPENCLAW_HOME CODEX_HOME
+WorkingDirectory=%h/.openclaw-shadverse/workspace
+ExecStart=%h/.local/share/shadverse-openclaw/node/bin/node %h/.local/share/shadverse-openclaw/node_modules/openclaw/openclaw.mjs gateway run
+UMask=0077
+NoNewPrivileges=true
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
