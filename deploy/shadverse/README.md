@@ -2,6 +2,8 @@
 
 SHADVERSE ©
 
+This profile is the first deployment of the unified SHADVERSE JARVIS platform. See the [platform architecture](ARCHITECTURE.md) for the commercial boundaries and implementation roadmap.
+
 This deployment profile uses the official OpenClaw package and its Control UI. It targets one Creator on a dedicated, unprivileged Linux account. The default entry point is the Persian Control UI on loopback. An optional private HTTPS route gives the Creator access on mobile.
 
 ## Release and dependencies
