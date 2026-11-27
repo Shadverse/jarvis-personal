@@ -8,9 +8,9 @@ streamed model audio remain unavailable.
 
 ## Creator review
 
-- [Desktop screenshot](review/premium-voice/jarvis-voice-desktop.jpg) at 1440 × 960.
-- [Mobile screenshot](review/premium-voice/jarvis-voice-mobile.jpg) at 786 × 1704, captured at 2× in a 393 × 852 CSS viewport.
-- [Motion recording](review/premium-voice/jarvis-voice-motion.mp4) from the desktop browser. The sequence shows idle motion, contraction while a test signal enters the browser microphone track, and expansion during prerecorded sample playback. The audible track is the sample aligned to the browser playback timestamp.
+- [Desktop screenshot](review/final-voice/jarvis-voice-desktop.jpg) at 1440 × 962.
+- [Mobile screenshot](review/final-voice/jarvis-voice-mobile.jpg) at 786 × 1704, captured at 2× in a 393 × 852 CSS viewport.
+- [Motion recording](review/final-voice/jarvis-voice-motion.mp4) from the desktop browser. The sequence shows idle motion, contraction while a test signal enters the browser microphone track, and expansion during prerecorded sample playback. The audible track is the sample aligned to the browser playback timestamp.
 
 The screenshots use an isolated synthetic Creator sign-in. Chromium verified
 right-to-left layout, Vazirmatn loading and no horizontal overflow on both

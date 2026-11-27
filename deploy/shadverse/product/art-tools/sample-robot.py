@@ -39,7 +39,7 @@ head *= 7.8
 triangles = head[faces]
 areas = np.linalg.norm(np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]), axis=1)
 rng = np.random.default_rng(11027)
-chosen = faces[rng.choice(len(faces), size=32000, p=areas / areas.sum())]
+chosen = faces[rng.choice(len(faces), size=42000, p=areas / areas.sum())]
 weights = rng.random((len(chosen), 2))
 weights[weights.sum(axis=1) > 1] = 1 - weights[weights.sum(axis=1) > 1]
 weights = np.column_stack([1 - weights.sum(axis=1), weights])

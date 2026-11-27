@@ -160,13 +160,16 @@ function voice() {
   return `<section class="voice-stage cinematic-voice" data-state="${demoState}" aria-labelledby="voice-title">
     <header class="voice-heading"><h1 id="voice-title">${label("voice")}</h1></header>
     <div class="voice-chamber">
+      <div class="voice-optic" aria-hidden="true"></div>
       <div class="voice-floor" aria-hidden="true"></div>
       ${energyCore(demoState)}
       <div class="voice-indicator"><i aria-hidden="true"></i><h2 id="state-title" aria-live="polite">${stateLabel(demoState)}</h2></div>
     </div>
     <div class="voice-dock glass">
       <div class="audio-buttons">
-        ${button("mic", icon("mic") + t("آزمایش میکروفون", "Test microphone"), "mic-check voice-main-control")}
+        <div class="voice-mic">
+          ${button("mic", icon("mic") + `<span class="voice-mic-label">${t("آزمایش میکروفون", "Test microphone")}</span>`, "mic-check voice-main-control")}
+        </div>
         ${button("sample", icon("wave") + t("پخش نمونهٔ انگلیسی", "Play voice sample"), "mic-check")}
         ${button("main", icon("chat") + t("گفت‌وگوی متنی", "Text chat"), "voice-text-control")}
       </div>
@@ -212,7 +215,9 @@ function syncVoice() {
   ]) {
     const b = stage.querySelector('[data-action="' + action + '"]');
     const stop = mode === "mic" ? t("قطع میکروفون", "Stop microphone") : t("توقف پخش", "Stop playback");
-    b.innerHTML = icon(ico) + (signal.mode === mode ? stop : off);
+    const caption = signal.mode === mode ? stop : off;
+    if (mode === "mic") b.querySelector(".voice-mic-label").textContent = caption;
+    else b.innerHTML = icon(ico) + caption;
     b.setAttribute("aria-pressed", String(signal.mode === mode));
   }
 }

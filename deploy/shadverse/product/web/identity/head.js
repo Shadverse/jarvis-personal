@@ -17,6 +17,7 @@ uniform vec4 state;
 uniform float time,yaw,sprite,pass;
 out vec3 N,P;
 out float seed,energy,stream,veil;
+out vec3 sourcePoint;
 vec2 turbulate(vec2 q, float t, float phase) {
  mat2 basis=mat2(.6,-.25,.25,.9), turn=mat2(.6,-.8,.8,.6);
  float frequency=3.4, amplitude=.35;
@@ -31,6 +32,10 @@ vec2 turbulate(vec2 q, float t, float phase) {
 }
 void main(){
  vec3 p=position*(32767./22000.);
+ sourcePoint=p;
+ // Give the existing faceless geometry a wider brow and a tapered lower chassis.
+ p.x*=mix(.84,1.1,smoothstep(-.55,.38,p.y));
+ p.z+=.035*smoothstep(.04,.37,p.y)*smoothstep(.25,.8,p.z);
  seed=fract(float(gl_VertexID)*.618034);
  float azimuth=atan(p.x,p.z);
  float phase=9.*p.y+3.*azimuth-time*2.4;
@@ -50,8 +55,8 @@ void main(){
  mat2 turn=mat2(cos(yaw),-sin(yaw),sin(yaw),cos(yaw));
  p.xz=turn*p.xz;vec3 n=normal;n.xz=turn*n.xz;
  float perspective=3.64/(3.8-p.z);
- gl_Position=vec4(p.x*.87*perspective*viewport.y/viewport.x,p.y*.87*perspective+.091,-p.z*.43-pass*.002,1.);
- gl_PointSize=clamp(viewport.y*.0051*sprite*(.75+.54*seed)*perspective,1.15,16.);
+ gl_Position=vec4(p.x*.95*perspective*viewport.y/viewport.x,p.y*.95*perspective+.06,-p.z*.43-pass*.002,1.);
+ gl_PointSize=clamp(viewport.y*.00465*sprite*(.75+.54*seed)*perspective,1.15,16.);
  N=n;P=p;energy=visibility;
 }`;
 const fragment = `#version 300 es
@@ -60,6 +65,7 @@ uniform float pass;
 uniform vec4 state;
 in vec3 N,P;
 in float seed,energy,stream,veil;
+in vec3 sourcePoint;
 out vec4 pixel;
 void main(){
  if(pass<.5){pixel=vec4(0.);return;}
@@ -74,18 +80,25 @@ void main(){
  float blue=max(0.,dot(n,normalize(vec3(.91,.29,-.18))));
  float pearl=pow(max(0.,dot(n,normalize(vec3(-.42,.72,.77)))),9.);
  float sensor=smoothstep(.84,.985,energy);
+ // Broken directional traces read as robotic instrumentation along the visor and temples.
+ float temple=abs(sourcePoint.x);
+ float front=smoothstep(.26,.61,sourcePoint.z);
+ float brow=1.-smoothstep(.014,.039,abs(sourcePoint.y+.005+.23*temple));
+ float cheek=1.-smoothstep(.012,.037,abs(sourcePoint.y+.47-.74*temple));
+ float brokenTrace=smoothstep(.06,.24,temple)*(1.-smoothstep(.43,.69,temple));
+ float trace=front*brokenTrace*max(brow*.76,cheek*.62);
  vec3 tint=mix(vec3(.36,.16,.95),vec3(.8,.23,.86),smoothstep(.31,.89,key));
  tint=mix(tint,vec3(.25,.72,1.),blue*blue*.83);
  tint=mix(tint,vec3(.84,.91,1.),pearl*.59+pow(seed,17.)*.21);
- tint=mix(tint,vec3(.34,.96,1.),sensor);
+ tint=mix(tint,vec3(.36,.95,1.),max(sensor,trace));
  tint=mix(tint,vec3(.97,.37,.60),state.w*.48);
- float lum=pow(energy,1.3)*(.23+.86*key+.45*blue+.72*edge+.55*pearl);
+ float lum=pow(energy,1.3)*(.30+1.02*key+.63*blue+.82*edge+.57*pearl);
  // Feather the cropped neckline and give the robotic sensors a distinct cyan highlight.
  lum+=.28*energy*max(0.,dot(n,normalize(vec3(.37,.38,.84))));
- lum=(lum+1.25*sensor)*smoothstep(-.91,-.64,P.y);
+ lum=(lum+1.56*sensor+1.27*trace)*smoothstep(-.91,-.64,P.y);
  lum*=.72+.55*seed+.8*state.y*stream;
- float a=clamp((exp(-d*5.)+.14*exp(-d*2.))*lum*(1.-.56*veil),0.,1.);
- pixel=vec4(tint*a*1.55,a);
+ float a=clamp((exp(-d*7.)+.26*exp(-d*2.1))*lum*(1.-.56*veil),0.,1.);
+ pixel=vec4(tint*a*1.71,a);
 }`;
 function gpu(canvas) {
   const gl = canvas.getContext("webgl2", {
@@ -214,14 +227,14 @@ function software(canvas) {
       const w = canvas.width,
         h = canvas.height;
       ctx.clearRect(0, 0, w, h);
-      const scale = h * 0.41,
+      const scale = h * 0.446,
         angle = yaw + state[1] * 0.14 * Math.sin(t),
         c = Math.cos(angle),
         s = Math.sin(angle);
       const pulse = 1 + (state[2] - state[0]) * (0.012 + signal[0] * (0.13 + 0.04 * signal[1]));
       for (let i = 0; i < count; i++) {
         const j = i * 7,
-          x = cloud[j],
+          x = cloud[j] * (0.84 + 0.26 * Math.max(0, Math.min(1, (cloud[j + 1] + 0.55) / 0.93))),
           y = cloud[j + 1],
           z = cloud[j + 2],
           nx = cloud[j + 3],
@@ -248,7 +261,7 @@ function software(canvas) {
         const r = Math.max(1, h * 0.0044);
         ctx.fillRect(
           w / 2 + (x * c + z * s) * p * scale * pulse,
-          h * 0.454 - (y + 0.009 * Math.sin(t)) * p * scale * pulse,
+          h * 0.47 - (y + 0.009 * Math.sin(t)) * p * scale * pulse,
           r,
           r,
         );
@@ -292,7 +305,7 @@ export function mountHead(original, readSignal, hasAudio = () => false) {
     slow = 0,
     pose = 0,
     look = 0,
-    quality = low ? 0.4 : backend.rasterCPU && !motion.matches ? 0.27 : 1,
+    quality = low ? 0.4 : backend.rasterCPU && !motion.matches ? 0.42 : 1,
     envelope = 0,
     converging = false;
   const host = canvas.parentElement;
@@ -336,7 +349,7 @@ export function mountHead(original, readSignal, hasAudio = () => false) {
     state = state.map((v, i) => v + (target[i] - v) * blend);
     converging = state.some((v, i) => Math.abs(v - target[i]) > 0.004);
     const count = Math.min(
-      Math.floor(quality * sampleCount),
+      Math.floor(Math.max(0.33, quality) * sampleCount),
       backend.name === "Canvas 2D" ? 13500 : sampleCount,
     );
     const [level, spectrum] = readSignal();
