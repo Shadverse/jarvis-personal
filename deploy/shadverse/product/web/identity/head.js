@@ -1,11 +1,12 @@
-import mesh from "./face.mesh";
-import packed from "./face.points";
+import mesh from "./robot.mesh";
+import packed from "./robot.points";
 const meshSize = new DataView(mesh.buffer, mesh.byteOffset, 4).getUint32(0, true);
 const meshBytes = meshSize * 10;
 const surface = mesh.subarray(4, 4 + meshBytes);
 const indices = mesh.subarray(4 + meshBytes);
 const stride = 10;
 export const sampleCount = packed.length / stride;
+/*! Particle turbulence and audio envelope adapted from Pipecat UI. Copyright (c) 2024–2026 Daily. BSD-2-Clause, see VOICE-NOTICES.txt. */
 const vertex = `#version 300 es
 precision highp float;
 layout(location=0) in vec3 position;
@@ -16,13 +17,25 @@ uniform vec4 state;
 uniform float time,yaw,sprite,pass;
 out vec3 N,P;
 out float seed,energy,stream,veil;
+vec2 turbulate(vec2 q, float t, float phase) {
+ mat2 basis=mat2(.6,-.25,.25,.9), turn=mat2(.6,-.8,.8,.6);
+ float frequency=3.4, amplitude=.35;
+ for(int i=0;i<4;i++){
+  vec2 wave=sin(frequency*(q*basis)+float(i)*t+phase);
+  q+=(amplitude/frequency)*basis[0]*wave;
+  basis*=turn;
+  amplitude*=mix(1.,max(wave.x,wave.y),.22);
+  frequency*=1.4;
+ }
+ return q;
+}
 void main(){
  vec3 p=position*(32767./22000.);
  seed=fract(float(gl_VertexID)*.618034);
  float azimuth=atan(p.x,p.z);
  float phase=9.*p.y+3.*azimuth-time*2.4;
  stream=pow(.5+.5*cos(phase+1.4*sin(3.*azimuth-time*.45)),5.);
- float pulse=(state.z-state.x)*(.045+.155*signal.x)*(.86+.14*cos(p.y*6.+signal.y*5.));
+ float pulse=(state.z-state.x)*(.023+.226*signal.x)*(.86+.14*cos(p.y*6.+signal.y*5.));
  p.xy*=1.+pulse*.52;
  p+=normal*pulse*.48;
  p.z+=pulse*(1.+signal.y*.55);
@@ -33,12 +46,12 @@ void main(){
  veil=pass*smoothstep(.953,.998,seed);
  p+=normal*(pass*.004+veil*(.035+.15*seed)*(.6+.4*sin(phase)));
  p.y+=veil*(.055+.047*sin(time*.86+seed*15.));
- p.x+=veil*.04*cos(phase);
+ p.xy+=veil*.59*(turbulate(p.xy,time*.7,phase)-p.xy);
  mat2 turn=mat2(cos(yaw),-sin(yaw),sin(yaw),cos(yaw));
  p.xz=turn*p.xz;vec3 n=normal;n.xz=turn*n.xz;
  float perspective=3.64/(3.8-p.z);
- gl_Position=vec4(p.x*perspective*viewport.y/viewport.x,p.y*perspective,-p.z*.43-pass*.002,1.);
- gl_PointSize=clamp(viewport.y*.0067*sprite*(.75+.54*seed)*perspective,1.15,16.);
+ gl_Position=vec4(p.x*.87*perspective*viewport.y/viewport.x,p.y*.87*perspective+.091,-p.z*.43-pass*.002,1.);
+ gl_PointSize=clamp(viewport.y*.0051*sprite*(.75+.54*seed)*perspective,1.15,16.);
  N=n;P=p;energy=visibility;
 }`;
 const fragment = `#version 300 es
@@ -60,14 +73,16 @@ void main(){
  float edge=pow(1.-max(facing,0.),2.);
  float blue=max(0.,dot(n,normalize(vec3(.91,.29,-.18))));
  float pearl=pow(max(0.,dot(n,normalize(vec3(-.42,.72,.77)))),9.);
- vec3 tint=mix(vec3(.48,.10,1.),vec3(1.,.12,.80),smoothstep(-.12,.83,key));
- tint=mix(tint,vec3(.18,.81,1.),blue*blue*.87);
- tint=mix(tint,vec3(1.,.93,1.),pearl*.72+pow(seed,17.)*.2);
+ float sensor=smoothstep(.84,.985,energy);
+ vec3 tint=mix(vec3(.36,.16,.95),vec3(.8,.23,.86),smoothstep(.31,.89,key));
+ tint=mix(tint,vec3(.25,.72,1.),blue*blue*.83);
+ tint=mix(tint,vec3(.84,.91,1.),pearl*.59+pow(seed,17.)*.21);
+ tint=mix(tint,vec3(.34,.96,1.),sensor);
  tint=mix(tint,vec3(.97,.37,.60),state.w*.48);
  float lum=pow(energy,1.3)*(.23+.86*key+.45*blue+.72*edge+.55*pearl);
- // Dissolve the neckline and let the supraorbital ridge and lips catch a softer fill.
+ // Feather the cropped neckline and give the robotic sensors a distinct cyan highlight.
  lum+=.28*energy*max(0.,dot(n,normalize(vec3(.37,.38,.84))));
- lum*=smoothstep(-1.01,-.61,P.y);
+ lum=(lum+1.25*sensor)*smoothstep(-.91,-.64,P.y);
  lum*=.72+.55*seed+.8*state.y*stream;
  float a=clamp((exp(-d*5.)+.14*exp(-d*2.))*lum*(1.-.56*veil),0.,1.);
  pixel=vec4(tint*a*1.55,a);
@@ -199,7 +214,7 @@ function software(canvas) {
       const w = canvas.width,
         h = canvas.height;
       ctx.clearRect(0, 0, w, h);
-      const scale = h * 0.47,
+      const scale = h * 0.41,
         angle = yaw + state[1] * 0.14 * Math.sin(t),
         c = Math.cos(angle),
         s = Math.sin(angle);
@@ -215,7 +230,7 @@ function software(canvas) {
         const front = nz * c - nx * s;
         if (front < 0.08 || y < -0.95) continue;
         const p = 3.8 / (3.8 - (z * c - x * s) * pulse - (1 - pulse));
-        const neck = Math.max(0, Math.min(1, (y + 0.98) / 0.35));
+        const neck = Math.max(0, Math.min(1, (y + 0.91) / 0.27));
         const lum =
           neck *
           Math.max(
@@ -228,12 +243,12 @@ function software(canvas) {
                 cloud[j + 6],
             ),
           );
-        const color = state[3] > 0.5 ? 3 : nx > 0.55 ? 2 : nx < -0.18 ? 1 : 0;
+        const color = state[3] > 0.5 ? 3 : cloud[j + 6] > 0.9 || nx > 0.55 ? 2 : nx < -0.18 ? 1 : 0;
         ctx.fillStyle = palette[color * 32 + Math.floor(lum * 31)];
         const r = Math.max(1, h * 0.0044);
         ctx.fillRect(
           w / 2 + (x * c + z * s) * p * scale * pulse,
-          h / 2 - (y + 0.009 * Math.sin(t)) * p * scale * pulse,
+          h * 0.454 - (y + 0.009 * Math.sin(t)) * p * scale * pulse,
           r,
           r,
         );
@@ -248,7 +263,7 @@ const targets = {
   speaking: [0, 0, 1, 0],
   error: [0, 0, 0, 1],
 };
-export function mountHead(original, readSignal) {
+export function mountHead(original, readSignal, hasAudio = () => false) {
   let canvas = original,
     backend;
   // Old contexts may be lost by the OS, even on devices with WebGL2.
@@ -278,6 +293,7 @@ export function mountHead(original, readSignal) {
     pose = 0,
     look = 0,
     quality = low ? 0.4 : backend.rasterCPU && !motion.matches ? 0.27 : 1,
+    envelope = 0,
     converging = false;
   const host = canvas.parentElement;
   function resize() {
@@ -323,29 +339,34 @@ export function mountHead(original, readSignal) {
       Math.floor(quality * sampleCount),
       backend.name === "Canvas 2D" ? 13500 : sampleCount,
     );
-    const signal = readSignal();
+    const [level, spectrum] = readSignal();
+    // The two-time-constant pulse follows syllables and releases between phrases.
+    const seconds = level > envelope ? 0.06 : 0.28;
+    envelope += (level - envelope) * (1 - Math.exp(-Math.min(dt / 1000, 0.1) / seconds));
+    const signal = [envelope, spectrum];
     backend.draw({
       count,
       t: pose,
-      yaw: -0.23 + (motion.matches ? 0 : 0.1 * Math.sin(pose * 0.48) + look * 0.2),
+      yaw: -0.15 + (motion.matches ? 0 : 0.1 * Math.sin(pose * 0.48) + look * 0.2),
       state,
       signal,
     });
     host.dataset.renderer = backend.name;
     host.dataset.points = count;
     host.dataset.amplitude = signal[0].toFixed(3);
+    host.dataset.displacement = ((state[2] - state[0]) * (.023 + .226 * envelope)).toFixed(3);
     host.dataset.frames = String(Number(host.dataset.frames || 0) + 1);
   }
   function tick(now) {
     frame = 0;
     if (closed || document.hidden) return;
     update(now);
-    if (!motion.matches || converging) schedule();
+    if (!motion.matches || converging || hasAudio()) schedule();
   }
   function schedule(force = false) {
     if (closed || document.hidden) return;
     if (force) update(performance.now(), true);
-    if (!frame && (!motion.matches || converging)) frame = requestAnimationFrame(tick);
+    if (!frame && (!motion.matches || converging || hasAudio())) frame = requestAnimationFrame(tick);
   }
   function visibility() {
     if (document.hidden) {

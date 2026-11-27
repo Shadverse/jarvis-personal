@@ -1,0 +1,251 @@
+body:has(.voice-shell) {
+  background: #090711;
+}
+
+body:has(.voice-shell)::before {
+  background:
+    radial-gradient(ellipse at 22% 40%, #33206070, transparent 52%),
+    radial-gradient(ellipse at 70% 74%, #06394955, transparent 53%),
+    #090711;
+}
+
+.voice-shell .page {
+  align-content: start;
+  padding-block: clamp(15px, 3.4vh, 38px) 16px;
+}
+
+.voice-shell .cinematic-voice {
+  --voice-cyan: #8ceaff;
+  --voice-violet: #b19aff;
+  display: grid;
+  justify-items: center;
+  gap: 13px;
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  min-width: 0;
+}
+
+.cinematic-voice .voice-heading {
+  text-align: center;
+}
+
+.cinematic-voice .voice-heading h1 {
+  font-size: clamp(32px, 4.3vw, 61px);
+  line-height: 1.26;
+  font-weight: 840;
+  color: #fffaff;
+  text-shadow: 0 0 42px #9c61ff4f;
+}
+
+.cinematic-voice .voice-chamber {
+  isolation: isolate;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  margin-top: 2px;
+  border: 1px solid #a79ae05a;
+  border-radius: clamp(24px, 3.9vw, 46px);
+  background:
+    radial-gradient(ellipse at 47% 48%, #34245c98 0%, transparent 38%),
+    radial-gradient(ellipse at 100% 52%, #10536154, transparent 41%),
+    radial-gradient(ellipse at -3% 25%, #51276955, transparent 43%),
+    linear-gradient(159deg, #100f1d, #090a13 62%, #0c1722);
+  box-shadow:
+    inset 0 1px 0 #ddd4ff8a,
+    inset 0 -1px 0 #88ecff36,
+    0 27px 66px #030308a3;
+}
+
+.cinematic-voice .voice-chamber::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(118deg, transparent 27%, #c789ff16 35%, transparent 51%),
+    linear-gradient(144deg, transparent 49%, #76cbff18 57%, transparent 76%),
+    linear-gradient(180deg, #c2b5ff12, transparent 26%);
+}
+
+.cinematic-voice .voice-chamber::after {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border-radius: inherit;
+  pointer-events: none;
+  border: 1px solid #c7d6f61a;
+  border-inline-color: #bbc7f713;
+  mask-image: linear-gradient(#0009, transparent 43%, transparent 64%, #000);
+}
+
+.cinematic-voice .voice-floor {
+  pointer-events: none;
+  position: absolute;
+  inset: auto 16% 33px;
+  height: 21%;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse closest-side at 53% 65%, #81e7ff52, #245aa529 40%, transparent 100%),
+    radial-gradient(ellipse closest-side at 44% 73%, #9d69f96b, transparent 100%);
+}
+
+.cinematic-voice .voice-floor::after {
+  content: "";
+  position: absolute;
+  inset: 36% 2% 4%;
+  border-radius: 50%;
+  border: 1px solid #c5b7ff55;
+  box-shadow: inset 0 0 16px #a190ff33, 0 0 24px #79daff32;
+}
+
+.voice-shell .cinematic-voice .portrait {
+  height: clamp(330px, 51vh, 520px);
+  max-width: 100%;
+}
+
+.cinematic-voice .voice-indicator {
+  position: absolute;
+  inset: auto 50% 15px auto;
+  transform: translateX(50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  white-space: nowrap;
+  padding: 6px 16px;
+  border: 1px solid #a9ddff3b;
+  border-radius: 30px;
+  background: #0e1022c7;
+  color: #e6e0fb;
+  backdrop-filter: blur(11px);
+  -webkit-backdrop-filter: blur(11px);
+}
+
+.cinematic-voice .voice-indicator h2 {
+  font-size: 15px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.cinematic-voice .voice-indicator i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--voice-violet);
+  box-shadow: 0 0 13px var(--voice-violet);
+}
+
+.cinematic-voice:is([data-state="listening"], [data-state="speaking"]) .voice-indicator i {
+  background: var(--voice-cyan);
+  box-shadow: 0 0 16px var(--voice-cyan);
+}
+
+.cinematic-voice .voice-dock {
+  width: min(100%, 720px);
+  border-radius: 27px;
+  overflow: hidden;
+  padding: 14px 16px 10px;
+  background: linear-gradient(124deg, #9d83ee28, #15162cdd 45%, #1433428a);
+  box-shadow: inset 0 1px #e7ddff64, inset 0 -1px #a8ecff2d, 0 15px 55px #02020891;
+}
+
+.cinematic-voice .voice-dock::before {
+  background:
+    radial-gradient(ellipse at 20% 0%, #b09aff68, transparent 42%),
+    radial-gradient(ellipse at 87% 100%, #6cdef16e, transparent 45%);
+  filter: url(#jarvis-lens);
+  opacity: 0.48;
+}
+
+.voice-shell .cinematic-voice .audio-buttons {
+  gap: 9px;
+}
+
+.voice-shell .cinematic-voice .audio-buttons button {
+  margin: 0;
+  min-height: 51px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid #c1cafa3f;
+  border-radius: 14px;
+  background: #111321aa;
+  color: #eeeaf9;
+  padding-inline: 17px;
+  font-size: 15px;
+  line-height: 1.5;
+  transition: background-color 160ms, border-color 160ms, box-shadow 160ms;
+}
+
+.voice-shell .cinematic-voice .audio-buttons .voice-main-control {
+  background: linear-gradient(140deg, #503981, #322557);
+  border-color: #cbb6ff7d;
+  box-shadow: inset 0 1px 0 #eee0ff65, 0 5px 22px #6b45ca41;
+}
+
+.voice-shell .cinematic-voice .audio-buttons button:is(:hover, [aria-pressed="true"]) {
+  border-color: var(--voice-cyan);
+  background-color: #203448;
+}
+
+.cinematic-voice :is(.voice-note, #audio-status) {
+  color: #c5c4d7;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.cinematic-voice .voice-note {
+  margin: 7px 0 0;
+}
+
+.cinematic-voice #audio-status:empty {
+  display: none;
+}
+
+.cinematic-voice .signal-meter {
+  margin-block: 10px 2px;
+}
+
+.cinematic-voice .voice-credits,
+.cinematic-voice .voice-review-modes {
+  color: #b7b5ce;
+  font-size: 13px;
+  text-align: center;
+}
+
+.cinematic-voice .voice-review-modes summary {
+  cursor: pointer;
+}
+
+@media (max-width: 720px) {
+  .voice-shell .page {
+    padding-block: 17px 12px;
+  }
+
+  .voice-shell .cinematic-voice {
+    gap: 10px;
+  }
+
+  .voice-shell .cinematic-voice .portrait {
+    height: clamp(300px, 47svh, 425px);
+  }
+
+  .voice-shell .cinematic-voice .audio-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+
+  .voice-shell .cinematic-voice .audio-buttons button {
+    min-width: 0;
+    padding-inline: 7px;
+    font-size: 13px;
+  }
+
+  .voice-shell .cinematic-voice .audio-buttons .voice-main-control {
+    grid-column: span 2;
+    font-size: 15px;
+  }
+}

@@ -4,7 +4,7 @@ The product uses one Persian-first account login. The Creator can use the assist
 
 ## Review the interface
 
-Run the build and open the generated `dist/review.html` in a regular browser. Choose «مشاهدهٔ پیش‌نمایش», then «دستیار صوتی». The controls show the renderer’s states, real local microphone analysis with browser permission, and analysis of a bundled prerecorded sample. The current human-derived geometry appears only in this review. [Renderer, sources and licenses](RENDERING.md)
+Run the build and open the generated `dist/review.html` in a regular browser. Choose «مشاهدهٔ پیش‌نمایش», then «دستیار صوتی». The controls show the renderer’s states, real local microphone analysis with browser permission, and analysis of a bundled prerecorded sample. The signed-in screen and the local review use the same robotic particle head. [Voice screen, review files and licenses](VOICE_SCREEN.md)
 
 ## Run the authenticated preview locally
 
@@ -36,13 +36,13 @@ Use `node manage.mjs invite` privately to issue a one-use member code valid for 
 | -------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | Gate           | Username and password, one-time registration-code activation, server-side session and logout       | Public HTTPS proxy cutover and live account sign-in proof                |
 | Assistant      | Creator text chat through private OpenClaw, prompt starters, local drafts and attachment selection | Uploaded attachments, in-app access to existing transcripts, member chat |
-| Voice          | Browser microphone analysis and analysed prerecorded audio                                         | Approved robot geometry, speech recognition and live replies             |
+| Voice          | Browser microphone analysis and analysed prerecorded audio                                         | Speech recognition and live replies             |
 | Workspace      | Session projects, notes, draft history, local file inventory, thumbnails and search                | Tenant-authorized storage and retrieval                                  |
 | Subscription   | Free, Pro and Ultra views with monthly and annual terms                                            | Entitlements, metering and purchases                                     |
 | Monitoring     | Live browser frame trace, statistics, pause and keyboard inspection                                | Server and billing telemetry                                             |
 | Administration | Creator-only account directory, operator CLI for codes and session revocation                      | Additional administrative operations in the browser                      |
 
-The deployed shell uses the brand mark while robotic geometry is pending. Drafts, selections and displayed turns live in page memory and clear at sign-out. OpenClaw keeps the conversation on its existing storage path, using a dedicated session for the configured Creator. Existing paired-device tools and conversations remain on the private Control UI. The service worker stores no application data.
+Drafts, selections and displayed turns live in page memory and clear at sign-out. OpenClaw keeps the conversation on its existing storage path, using a dedicated session for the configured Creator. Existing paired-device tools and conversations remain on the private Control UI. The service worker stores no application data.
 
 ## Authentication boundary
 

@@ -1,10 +1,10 @@
 export const voiceStates = {
-  idle: ["آماده", "Idle"],
-  listening: ["شنیدن", "Listening"],
+  idle: ["آماده", "Ready"],
+  listening: ["در حال شنیدن", "Listening"],
   thinking: ["اندیشیدن", "Thinking"],
-  speaking: ["سخن گفتن", "Speaking"],
+  speaking: ["در حال پخش", "Playing"],
   error: ["خطا", "Error"],
 };
 export function energyCore(state = "idle") {
-  return `<div class="portrait" data-state="${state}" role="img" aria-label="${document.documentElement.lang === "en" ? "Three-dimensional JARVIS face in luminous particles" : "چهرهٔ سه‌بعدی جارویس از ذرات نورانی"}"><canvas aria-hidden="true"></canvas></div>`;
+  return `<div class="portrait" data-state="${state}" role="img" aria-label="${document.documentElement.lang === "en" ? "Three-dimensional JARVIS robotic head in luminous particles" : "سر رباتیک سه‌بعدی جارویس از ذرات نورانی"}"><canvas aria-hidden="true"></canvas></div>`;
 }

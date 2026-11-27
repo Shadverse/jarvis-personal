@@ -156,26 +156,34 @@ function title(k) {
   return `<div class="pagetitle"><h1>${label(k)}</h1></div>`;
 }
 function voice() {
-  const stateLabel = (k) => t(...voiceStates[k]);
-
-  return `<section class="voice-stage" data-state="${demoState}"><h1>${label("voice")}</h1>
-  <p class="sub">${review ? t("پیش‌نمایش حرکت پوستهٔ ذره‌ای و واکنش به صدا", "Particle motion and audio response preview") : t("میکروفون و پخش نمونه را اینجا آزمایش کنید. گفت‌وگوی صوتی زنده هنوز در دسترس نیست.", "Test microphone and sample playback here. Live voice conversation is unavailable.")}</p>
-  ${review ? `<div class="identity-field">${energyCore(demoState)}</div>` : `<div class="voice-signal glass">${icon("wave")}</div>`}
-  <h2 id="state-title" aria-live="polite">${stateLabel(demoState)}</h2>
-  ${
-    review
-      ? `<div class="modes glass" role="group" aria-label="${t("حالت‌های نمایشی", "Demonstration states")}">${Object.keys(
-          voiceStates,
-        )
-          .map(
-            (k) =>
-              `<button type="button" data-action="demo-${k}" aria-pressed="${k === demoState}">${stateLabel(k)}</button>`,
-          )
-          .join("")}</div>`
-      : ""
-  }
-  <div class="signal-meter" hidden><label>${t("دامنهٔ صدا", "Level")}<meter min="0" max="1" value="0"></meter></label><label>${t("مرکز طیفی نسبی", "Relative spectral centroid")}<meter min="0" max="1" value="0"></meter></label></div><div class="audio-buttons">${button("mic", icon("mic") + t("آزمایش میکروفون", "Test microphone"), "mic-check")}${button("sample", icon("wave") + t("پخش نمونهٔ انگلیسی", "Play voice sample"), "mic-check")}</div>
-  <p class="notice" id="audio-status" role="status">${safe(micState)}</p></section>`;
+  const stateLabel = (key) => t(...voiceStates[key]);
+  return `<section class="voice-stage cinematic-voice" data-state="${demoState}" aria-labelledby="voice-title">
+    <header class="voice-heading"><h1 id="voice-title">${label("voice")}</h1></header>
+    <div class="voice-chamber">
+      <div class="voice-floor" aria-hidden="true"></div>
+      ${energyCore(demoState)}
+      <div class="voice-indicator"><i aria-hidden="true"></i><h2 id="state-title" aria-live="polite">${stateLabel(demoState)}</h2></div>
+    </div>
+    <div class="voice-dock glass">
+      <div class="audio-buttons">
+        ${button("mic", icon("mic") + t("آزمایش میکروفون", "Test microphone"), "mic-check voice-main-control")}
+        ${button("sample", icon("wave") + t("پخش نمونهٔ انگلیسی", "Play voice sample"), "mic-check")}
+        ${button("main", icon("chat") + t("گفت‌وگوی متنی", "Text chat"), "voice-text-control")}
+      </div>
+      <div class="signal-meter" hidden>
+        <label>${t("دامنهٔ صدا", "Audio level")}<meter min="0" max="1" value="0"></meter></label>
+        <label>${t("مرکز طیفی نسبی", "Relative spectral centroid")}<meter min="0" max="1" value="0"></meter></label>
+      </div>
+      <p class="voice-note">${t("گفت‌وگوی صوتی زنده هنوز متصل نیست.", "Live voice conversation is unavailable.")}</p>
+      <p class="notice" id="audio-status" role="status">${safe(micState)}</p>
+    </div>
+    ${review ? `<details class="voice-review-modes" open><summary>${t("آزمایش حالت‌های حرکت", "Test motion states")}</summary>
+      <div class="modes" role="group" aria-label="${t("حالت‌های نمایشی", "Demonstration states")}">${Object.keys(voiceStates)
+        .map((key) => `<button type="button" data-action="demo-${key}" aria-pressed="${key === demoState}">${stateLabel(key)}</button>`)
+        .join("")}</div>
+    </details>` : ""}
+    <a class="voice-credits" href="./identity/VOICE-NOTICES.txt" target="_blank" rel="noopener">${t("منابع و مجوزها", "Sources and licenses")}</a>
+  </section>`;
 }
 function syncVoice() {
   clearInterval(meterTimer);
@@ -203,7 +211,8 @@ function syncVoice() {
     ["sample", "sample", "wave", t("پخش نمونهٔ انگلیسی", "Play voice sample")],
   ]) {
     const b = stage.querySelector('[data-action="' + action + '"]');
-    b.innerHTML = icon(ico) + (signal.mode === mode ? t("توقف", "Stop") : off);
+    const stop = mode === "mic" ? t("قطع میکروفون", "Stop microphone") : t("توقف پخش", "Stop playback");
+    b.innerHTML = icon(ico) + (signal.mode === mode ? stop : off);
     b.setAttribute("aria-pressed", String(signal.mode === mode));
   }
 }
@@ -279,7 +288,7 @@ function admin() {
 }
 function shell() {
   const creator = session?.role === "creator" || review;
-  return `<div class="shell"><button class="scrim ${drawer ? "open" : ""}" aria-label="${t("بستن منو", "Close menu")}" data-action="menu"></button><aside class="rail glass ${drawer ? "open" : ""}">${button("menu", icon("close"), "iconbtn drawerclose")}${brand()}
+  return `<div class="shell${page === "voice" ? " voice-shell" : ""}"><button class="scrim ${drawer ? "open" : ""}" aria-label="${t("بستن منو", "Close menu")}" data-action="menu"></button><aside class="rail glass ${drawer ? "open" : ""}">${button("menu", icon("close"), "iconbtn drawerclose")}${brand()}
  <nav class="navgroup"><small>${t("محیط شخصی", "Personal space")}</small>${["main", "voice", "workspace", "monitor"].map(nav).join("")}</nav>
  <nav class="navgroup"><small>${t("حساب کاربری", "Account")}</small>${nav("plans")}${creator ? nav("admin") : ""}</nav>
  <div class="railbottom"><span class="pill">${icon("user")}${review ? previewLabel() : `<bdi>${safe(session.name)}</bdi>`}</span>${button("logout", icon("logout") + t("خروج", "Sign out"), "navbtn")}</div></aside>
@@ -303,7 +312,7 @@ function render() {
 
   const canvas = app.querySelector(".portrait canvas");
   if (canvas) {
-    head = mountHead(canvas, () => signal.read());
+    head = mountHead(canvas, () => signal.read(), () => signal.mode !== "off");
     head.setState(page === "voice" ? demoState : "idle");
   }
   const scope = app.querySelector("#scope");

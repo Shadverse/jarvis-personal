@@ -1,5 +1,7 @@
 # SHADVERSE JARVIS · Luminous particle motion
 
+These notes document the previous portrait. See [the current voice screen](VOICE_SCREEN.md) for the robotic particle renderer and its licenses.
+
 The human-derived portrait is retained for motion testing in the local and portable review, which are separate from the signed-in product surface. The approved robotic head is pending. The recovery checked three pre-existing commercially usable candidates:
 
 | Asset           | Source and license                                                                                                                                         | Fit                                    |

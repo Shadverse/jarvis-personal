@@ -12,6 +12,7 @@ for (const asset of [
   "index.html",
   "OpenClaw-LICENSE.txt",
   "identity/MakeHuman-CC0.txt",
+  "identity/VOICE-NOTICES.txt",
 ])
   await cp("web/" + asset, "dist/" + asset, { recursive: true });
 await build({
@@ -47,7 +48,7 @@ const fontLicenses = (
     ),
   )
 ).join("\n");
-const geometryLicense = await readFile("web/identity/MakeHuman-CC0.txt", "utf8");
+const voiceLicense = await readFile("web/identity/VOICE-NOTICES.txt", "utf8");
 const html = (await readFile("web/index.html", "utf8"))
   .replace("<html lang", "<html data-standalone lang")
   .replace('<link rel="stylesheet" href="./style.css">', () => "<style>" + css + "</style>");
@@ -60,7 +61,8 @@ const license =
   encodeURIComponent(await readFile("web/OpenClaw-LICENSE.txt", "utf8"));
 const js = (await readFile("dist/app.js", "utf8"))
   .replaceAll("./icon-192.png", logo)
-  .replaceAll("./OpenClaw-LICENSE.txt", license);
+  .replaceAll("./OpenClaw-LICENSE.txt", license)
+  .replaceAll("./identity/VOICE-NOTICES.txt", "data:text/plain;charset=utf-8," + encodeURIComponent(voiceLicense));
 await writeFile(
   "dist/review.html",
   html
@@ -70,8 +72,8 @@ await writeFile(
       () =>
         "<script type='text/plain' id='font-licenses'>" +
         fontLicenses +
-        "</script><script type='text/plain' id='geometry-license'>" +
-        geometryLicense +
+        "</script><script type='text/plain' id='voice-license'>" +
+        voiceLicense +
         "</script></head>",
     )
     .replace('<link rel="manifest" href="./app.webmanifest">', "")
