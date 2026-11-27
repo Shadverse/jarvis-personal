@@ -2,6 +2,7 @@ import lensMap from "./art/glass-normal.png";
 import { energyCore, voiceStates } from "./core.js";
 import { icon } from "./icons.js";
 import { Signal } from "./identity/audio.js";
+import { readContours } from "./identity/contours.js";
 import { mountHead } from "./identity/head.js";
 import { mountScope } from "./instruments.js";
 const app = document.querySelector("#app");
@@ -37,6 +38,7 @@ let workspaceEpoch = 0,
 let head = null,
   stopScope = null,
   lastPortrait = null,
+  creatorContours,
   voiceEpoch = 0;
 let projects = [],
   activeProject = "",
@@ -56,6 +58,7 @@ function stopAudio() {
 }
 function clearWorkspace() {
   workspaceEpoch++;
+  creatorContours = undefined;
   projects = [];
   activeProject = "";
   notes = [];
@@ -184,6 +187,12 @@ function voice() {
       <div class="modes" role="group" aria-label="${t("حالت‌های نمایشی", "Demonstration states")}">${Object.keys(voiceStates)
         .map((key) => `<button type="button" data-action="demo-${key}" aria-pressed="${key === demoState}">${stateLabel(key)}</button>`)
         .join("")}</div>
+    </details>` : ""}
+    ${review || session?.role === "creator" ? `<details class="voice-review-modes">
+      <summary>${t("چهرهٔ خصوصی", "Private portrait")}</summary>
+      <label for="creator-contours">${t("فایل خطوط چهره", "Portrait contours file")}</label>
+      <input id="creator-contours" type="file" accept=".json,application/json">
+      <p id="contour-status" role="status">${creatorContours ? t("چهرهٔ خصوصی فعال است.", "Private portrait is active.") : ""}</p>
     </details>` : ""}
     <a class="voice-credits" href="./identity/VOICE-NOTICES.txt" target="_blank" rel="noopener">${t("منابع و مجوزها", "Sources and licenses")}</a>
   </section>`;
@@ -317,7 +326,7 @@ function render() {
 
   const canvas = app.querySelector(".portrait canvas");
   if (canvas) {
-    head = mountHead(canvas, () => signal.read(), () => signal.mode !== "off");
+    head = mountHead(canvas, () => signal.read(), () => signal.mode !== "off", creatorContours);
     head.setState(page === "voice" ? demoState : "idle");
   }
   const scope = app.querySelector("#scope");
@@ -630,6 +639,26 @@ app.addEventListener("input", (event) => {
   }
 });
 app.addEventListener("change", async (event) => {
+  if (event.target.id === "creator-contours") {
+    const file = event.target.files[0];
+    if (!file) return;
+    const portrait = head;
+    const status = app.querySelector("#contour-status");
+    try {
+      if (file.size > 100_000) throw Error("Contour file too large");
+      const strokes = readContours(await file.text());
+      if (portrait !== head || event.target.files[0] !== file) return;
+      portrait.setContours(strokes);
+      creatorContours = strokes;
+      status.textContent = t("چهرهٔ خصوصی فعال است.", "Private portrait is active.");
+    } catch {
+      if (event.target.files[0] === file)
+        status.textContent = t("خواندن فایل خطوط چهره ممکن نشد.", "Could not read the portrait contours file.");
+    } finally {
+      if (event.target.files[0] === file) event.target.value = "";
+    }
+    return;
+  }
   if (event.target.id === "project-filter") {
     activeProject = event.target.value;
     render();

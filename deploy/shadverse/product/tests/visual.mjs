@@ -30,16 +30,14 @@ try {
       reducedMotion: "reduce",
     });
     const page = await context.newPage();
-    // Record the actual WebGL colour mask at every indexed surface draw.
+    // Trace drawing commands to verify the portrait is made of point sprites.
     await page.addInitScript(() => {
       const proto = window.WebGL2RenderingContext?.prototype;
       if (!proto) return;
-      const draw = proto.drawElements;
-      window.depthOnlyDraws = 0;
-      window.coloredSurfaces = 0;
-      proto.drawElements = function (...args) {
-        if (this.getParameter(this.COLOR_WRITEMASK).some(Boolean)) window.coloredSurfaces++;
-        else window.depthOnlyDraws++;
+      const draw = proto.drawArrays;
+      window.particleDraws = 0;
+      proto.drawArrays = function (...args) {
+        if (args[0] === this.POINTS && args[2] > 0) window.particleDraws++;
         return draw.apply(this, args);
       };
     });
@@ -129,7 +127,7 @@ try {
     await snap("voice", true);
     assert.equal(await page.locator(".portrait").getAttribute("data-renderer"), "WebGL2");
     const idlePixels = await page.locator(".portrait canvas").screenshot();
-    assert.ok(await page.evaluate(() => window.depthOnlyDraws > 0 && window.coloredSurfaces === 0));
+    assert.ok(await page.evaluate(() => window.particleDraws > 0));
     for (const state of ["listening", "thinking", "speaking", "error", "idle"]) {
       await page.click("[data-action=demo-" + state + "]");
       assert.equal(await page.locator(".voice-stage .portrait").getAttribute("data-state"), state);

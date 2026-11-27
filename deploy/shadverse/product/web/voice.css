@@ -50,8 +50,8 @@ body:has(.voice-shell)::before {
   inset: 1% 6% 6%;
   border-radius: 50% / 45%;
   background:
-    radial-gradient(ellipse at 45% 43%, #6330a567, transparent 54%),
-    radial-gradient(ellipse at 88% 51%, #12759055, transparent 32%),
+    radial-gradient(ellipse at 45% 43%, #45277557, transparent 54%),
+    radial-gradient(ellipse at 88% 51%, #12759045, transparent 32%),
     linear-gradient(120deg, #6c4da21e, transparent 49%, #4ad4ee19);
   border: 1px solid #b5a1ea30;
   box-shadow:
@@ -102,7 +102,7 @@ body:has(.voice-shell)::before {
 }
 
 .voice-shell .cinematic-voice .portrait canvas {
-  filter: drop-shadow(0 0 9px #9a6dff66);
+  filter: drop-shadow(0 0 4px #50caff80);
 }
 
 .voice-indicator {

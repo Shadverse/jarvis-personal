@@ -1,105 +1,49 @@
-import mesh from "./robot.mesh";
-import packed from "./robot.points";
-const meshSize = new DataView(mesh.buffer, mesh.byteOffset, 4).getUint32(0, true);
-const meshBytes = meshSize * 10;
-const surface = mesh.subarray(4, 4 + meshBytes);
-const indices = mesh.subarray(4 + meshBytes);
-const stride = 10;
-export const sampleCount = packed.length / stride;
-/*! Particle turbulence and audio envelope adapted from Pipecat UI. Copyright (c) 2024–2026 Daily. BSD-2-Clause, see VOICE-NOTICES.txt. */
+import { makeCloud } from "./contours.js";
+
+/*! Audio envelope adapted from Pipecat UI. Copyright (c) 2024–2026 Daily. BSD-2-Clause, see VOICE-NOTICES.txt. */
 const vertex = `#version 300 es
 precision highp float;
-layout(location=0) in vec3 position;
-layout(location=1) in vec3 normal;
-layout(location=2) in float visibility;
+layout(location=0) in vec4 particle;
 uniform vec2 viewport,signal;
 uniform vec4 state;
-uniform float time,yaw,sprite,pass;
-out vec3 N,P;
-out float seed,energy,stream,veil;
-out vec3 sourcePoint;
-vec2 turbulate(vec2 q, float t, float phase) {
- mat2 basis=mat2(.6,-.25,.25,.9), turn=mat2(.6,-.8,.8,.6);
- float frequency=3.4, amplitude=.35;
- for(int i=0;i<4;i++){
-  vec2 wave=sin(frequency*(q*basis)+float(i)*t+phase);
-  q+=(amplitude/frequency)*basis[0]*wave;
-  basis*=turn;
-  amplitude*=mix(1.,max(wave.x,wave.y),.22);
-  frequency*=1.4;
- }
- return q;
-}
+uniform float time,yaw,motion;
+out float light,seed;
 void main(){
- vec3 p=position*(32767./22000.);
- sourcePoint=p;
- // Give the existing faceless geometry a wider brow and a tapered lower chassis.
- p.x*=mix(.84,1.1,smoothstep(-.55,.38,p.y));
- p.z+=.035*smoothstep(.04,.37,p.y)*smoothstep(.25,.8,p.z);
- seed=fract(float(gl_VertexID)*.618034);
- float azimuth=atan(p.x,p.z);
- float phase=9.*p.y+3.*azimuth-time*2.4;
- stream=pow(.5+.5*cos(phase+1.4*sin(3.*azimuth-time*.45)),5.);
- float pulse=(state.z-state.x)*(.023+.226*signal.x)*(.86+.14*cos(p.y*6.+signal.y*5.));
- p.xy*=1.+pulse*.52;
- p+=normal*pulse*.48;
- p.z+=pulse*(1.+signal.y*.55);
- p*=1.+.008*sin(time*1.1);
- // A travelling wave displaces the contours tangentially in the thinking pose.
- vec3 tangent=vec3(p.z,0.,-p.x);
- p+=state.y*stream*(.052*tangent+normal*.012);
- veil=pass*smoothstep(.953,.998,seed);
- p+=normal*(pass*.004+veil*(.035+.15*seed)*(.6+.4*sin(phase)));
- p.y+=veil*(.055+.047*sin(time*.86+seed*15.));
- p.xy+=veil*.59*(turbulate(p.xy,time*.7,phase)-p.xy);
- mat2 turn=mat2(cos(yaw),-sin(yaw),sin(yaw),cos(yaw));
- p.xz=turn*p.xz;vec3 n=normal;n.xz=turn*n.xz;
- float perspective=3.64/(3.8-p.z);
- gl_Position=vec4(p.x*.95*perspective*viewport.y/viewport.x,p.y*.95*perspective+.06,-p.z*.43-pass*.002,1.);
- gl_PointSize=clamp(viewport.y*.00465*sprite*(.75+.54*seed)*perspective,1.15,16.);
- N=n;P=p;energy=visibility;
+  vec3 p = particle.xyz;
+  seed = fract(float(gl_VertexID) * .618034);
+  float phase = seed * 6.283185;
+  float spread = (state.z - state.x) * (.023 + .226 * signal.x);
+  float drift = motion * (.006 + state.x * (.025 + .10 * signal.x)
+    + state.z * (.048 + .16 * signal.x) + state.y * .021);
+  float rate = time * (1.5 + state.x * 3.5 + state.z * 5. + signal.y * 2.);
+  float variation = .38 + .62 * seed;
+  p.xy *= 1. + spread * .43;
+  p.xy += drift * variation * vec2(sin(rate * (1. + seed) + phase),
+    cos(rate * (1.3 + seed) + phase * 2.));
+  p.z += drift * .55 * sin(rate + phase);
+  float c = cos(yaw), s = sin(yaw);
+  float z = p.z * c - p.x * s;
+  float perspective = 3.8 / (3.8 - z);
+  float scale = min(viewport.y, viewport.x * 1.42);
+  gl_Position = vec4(vec2(p.x * c + p.z * s, p.y - .055) * (.91 * perspective * scale / viewport), 0., 1.);
+  gl_PointSize = max(1.5, scale * (.0043 + .0048 * particle.w) * (.8 + .42 * seed));
+  light = particle.w * (.78 + .22 * seed - .20 * state.y + motion * .16 * sin(rate + phase));
 }`;
 const fragment = `#version 300 es
 precision highp float;
-uniform float pass;
 uniform vec4 state;
-in vec3 N,P;
-in float seed,energy,stream,veil;
-in vec3 sourcePoint;
+in float light,seed;
 out vec4 pixel;
 void main(){
- if(pass<.5){pixel=vec4(0.);return;}
- vec2 uv=gl_PointCoord*2.-1.;
- float d=dot(uv,uv);
- if(d>1.)discard;
- vec3 n=normalize(N);
- float facing=dot(n,normalize(vec3(0.,0.,3.8)-P));
- if(facing<-.06)discard;
- float key=max(0.,dot(n,normalize(vec3(-.64,.67,.49))));
- float edge=pow(1.-max(facing,0.),2.);
- float blue=max(0.,dot(n,normalize(vec3(.91,.29,-.18))));
- float pearl=pow(max(0.,dot(n,normalize(vec3(-.42,.72,.77)))),9.);
- float sensor=smoothstep(.84,.985,energy);
- // Broken directional traces read as robotic instrumentation along the visor and temples.
- float temple=abs(sourcePoint.x);
- float front=smoothstep(.26,.61,sourcePoint.z);
- float brow=1.-smoothstep(.014,.039,abs(sourcePoint.y+.005+.23*temple));
- float cheek=1.-smoothstep(.012,.037,abs(sourcePoint.y+.47-.74*temple));
- float brokenTrace=smoothstep(.06,.24,temple)*(1.-smoothstep(.43,.69,temple));
- float trace=front*brokenTrace*max(brow*.76,cheek*.62);
- vec3 tint=mix(vec3(.36,.16,.95),vec3(.8,.23,.86),smoothstep(.31,.89,key));
- tint=mix(tint,vec3(.25,.72,1.),blue*blue*.83);
- tint=mix(tint,vec3(.84,.91,1.),pearl*.59+pow(seed,17.)*.21);
- tint=mix(tint,vec3(.36,.95,1.),max(sensor,trace));
- tint=mix(tint,vec3(.97,.37,.60),state.w*.48);
- float lum=pow(energy,1.3)*(.30+1.02*key+.63*blue+.82*edge+.57*pearl);
- // Feather the cropped neckline and give the robotic sensors a distinct cyan highlight.
- lum+=.28*energy*max(0.,dot(n,normalize(vec3(.37,.38,.84))));
- lum=(lum+1.56*sensor+1.27*trace)*smoothstep(-.91,-.64,P.y);
- lum*=.72+.55*seed+.8*state.y*stream;
- float a=clamp((exp(-d*7.)+.26*exp(-d*2.1))*lum*(1.-.56*veil),0.,1.);
- pixel=vec4(tint*a*1.71,a);
+  vec2 uv = gl_PointCoord * 2. - 1.;
+  float d = dot(uv, uv);
+  if (d > 1.) discard;
+  float alpha = min(1., light * (1.48 * exp(-d * 5.0) + .29 * exp(-d * 2.8)));
+  vec3 ice = mix(vec3(.26,.77,1.), vec3(.86,.97,1.), min(1., light * (.74 + .4 * seed)));
+  vec3 tint = mix(ice, vec3(1.,.48,.62), state.w * .7);
+  pixel = vec4(tint * alpha, alpha);
 }`;
+
 function gpu(canvas) {
   const gl = canvas.getContext("webgl2", {
     alpha: true,
@@ -109,11 +53,11 @@ function gpu(canvas) {
   });
   if (!gl) return null;
   function compile(type, source) {
-    const s = gl.createShader(type);
-    gl.shaderSource(s, source);
-    gl.compileShader(s);
-    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(s));
-    return s;
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw Error(gl.getShaderInfoLog(shader));
+    return shader;
   }
   const program = gl.createProgram();
   for (const [type, source] of [
@@ -127,145 +71,98 @@ function gpu(canvas) {
   gl.linkProgram(program);
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(program));
   gl.useProgram(program);
-  const pointVao = gl.createVertexArray(),
-    surfaceVao = gl.createVertexArray();
-  const buffers = [];
-  function upload(target, data) {
-    const buffer = gl.createBuffer();
-    buffers.push(buffer);
-    gl.bindBuffer(target, buffer);
-    gl.bufferData(target, data, gl.STATIC_DRAW);
-  }
-  // Both buffers use the same quantized coordinates and normals.
-  for (const [vao, data] of [
-    [pointVao, packed],
-    [surfaceVao, surface],
-  ]) {
-    gl.bindVertexArray(vao);
-    upload(gl.ARRAY_BUFFER, data);
-    for (const [loc, size, type, offset] of [
-      [0, 3, gl.SHORT, 0],
-      [1, 3, gl.BYTE, 6],
-      [2, 1, gl.UNSIGNED_BYTE, 9],
-    ]) {
-      gl.enableVertexAttribArray(loc);
-      gl.vertexAttribPointer(loc, size, type, true, stride, offset);
-    }
-  }
-  upload(gl.ELEMENT_ARRAY_BUFFER, indices);
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
   const u = Object.fromEntries(
-    ["state", "time", "yaw", "viewport", "sprite", "signal", "pass"].map((key) => [
+    ["state", "time", "yaw", "viewport", "signal", "motion"].map((key) => [
       key,
       gl.getUniformLocation(program, key),
     ]),
   );
-  gl.enable(gl.DEPTH_TEST);
-  gl.depthFunc(gl.LEQUAL);
+  gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
   return {
     name: "WebGL2",
     rasterCPU: /swiftshader|llvmpipe|software/i.test(
       String(gl.getExtension("WEBGL_debug_renderer_info") && gl.getParameter(0x9246)),
     ),
-    draw({ count, t, yaw, state, signal }) {
+    setCloud(cloud) {
+      gl.bufferData(gl.ARRAY_BUFFER, cloud, gl.STATIC_DRAW);
+    },
+    draw({ count, t, yaw, state, signal, motion }) {
       gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.depthMask(true);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.clear(gl.COLOR_BUFFER_BIT);
       gl.uniform2f(u.viewport, canvas.width, canvas.height);
       gl.uniform1f(u.time, t);
       gl.uniform1f(u.yaw, yaw);
+      gl.uniform1f(u.motion, motion);
       gl.uniform4fv(u.state, state);
       gl.uniform2fv(u.signal, signal);
-      gl.uniform1f(u.sprite, Math.sqrt(sampleCount / count));
-      gl.uniform1f(u.pass, 0);
-      gl.disable(gl.BLEND);
-      gl.bindVertexArray(surfaceVao);
-      // Invisible anatomical depth prevents far-side samples filling the eye sockets.
-      gl.colorMask(false, false, false, false);
-      gl.drawElements(gl.TRIANGLES, indices.length / 2, gl.UNSIGNED_SHORT, 0);
-      gl.colorMask(true, true, true, true);
-      gl.uniform1f(u.pass, 1);
-      gl.depthMask(false);
-      gl.enable(gl.BLEND);
-      gl.bindVertexArray(pointVao);
       gl.drawArrays(gl.POINTS, 0, count);
     },
     close() {
-      for (const b of buffers) gl.deleteBuffer(b);
-      gl.deleteVertexArray(pointVao);
-      gl.deleteVertexArray(surfaceVao);
+      gl.deleteBuffer(buffer);
+      gl.deleteVertexArray(vao);
       gl.deleteProgram(program);
       gl.getExtension("WEBGL_lose_context")?.loseContext();
     },
   };
 }
+
 function software(canvas) {
-  const view = new DataView(packed.buffer, packed.byteOffset, packed.byteLength);
-  const cloud = new Float32Array(sampleCount * 7);
-  for (let i = 0; i < sampleCount; i++) {
-    for (let k = 0; k < 3; k++) {
-      cloud[7 * i + k] = view.getInt16(i * stride + k * 2, true) / 22000;
-      cloud[7 * i + 3 + k] = view.getInt8(i * stride + 6 + k) / 127;
-    }
-    cloud[7 * i + 6] = packed[i * stride + 9] / 255;
-  }
   const ctx = canvas.getContext("2d");
-  const palette = Array.from({ length: 128 }, (_, i) => {
-    const b = (i % 32) / 31;
-    const col = [
-      [149, 75, 255],
-      [247, 83, 213],
-      [91, 207, 255],
-      [255, 158, 172],
-    ][i >> 5];
-    return "rgb(" + col.map((v) => Math.round(v * (0.18 + 0.82 * b))).join(",") + ")";
-  });
+  let cloud;
   return {
     name: "Canvas 2D",
+    setCloud(points) {
+      cloud = points;
+    },
     close() {},
-    draw({ count, t, yaw, state, signal }) {
-      const w = canvas.width,
-        h = canvas.height;
-      ctx.clearRect(0, 0, w, h);
-      const scale = h * 0.446,
-        angle = yaw + state[1] * 0.14 * Math.sin(t),
-        c = Math.cos(angle),
-        s = Math.sin(angle);
-      const pulse = 1 + (state[2] - state[0]) * (0.012 + signal[0] * (0.13 + 0.04 * signal[1]));
+    draw({ count, t, yaw, state, signal, motion }) {
+      const [listening, thinking, speaking, error] = state;
+      const { width, height } = canvas;
+      ctx.clearRect(0, 0, width, height);
+      const scale = Math.min(height, width * 1.42);
+      const c = Math.cos(yaw),
+        s = Math.sin(yaw);
+      const spread = (speaking - listening) * (0.023 + 0.226 * signal[0]);
+      const drift =
+        motion *
+        (0.006 +
+          listening * (0.025 + 0.1 * signal[0]) +
+          speaking * (0.048 + 0.16 * signal[0]) +
+          thinking * 0.021);
+      const rate = t * (1.5 + listening * 3.5 + speaking * 5 + signal[1] * 2);
       for (let i = 0; i < count; i++) {
-        const j = i * 7,
-          x = cloud[j] * (0.84 + 0.26 * Math.max(0, Math.min(1, (cloud[j + 1] + 0.55) / 0.93))),
-          y = cloud[j + 1],
-          z = cloud[j + 2],
-          nx = cloud[j + 3],
-          ny = cloud[j + 4],
-          nz = cloud[j + 5];
-        const front = nz * c - nx * s;
-        if (front < 0.08 || y < -0.95) continue;
-        const p = 3.8 / (3.8 - (z * c - x * s) * pulse - (1 - pulse));
-        const neck = Math.max(0, Math.min(1, (y + 0.91) / 0.27));
-        const lum =
-          neck *
-          Math.max(
-            0,
-            Math.min(
-              1,
-              (0.18 +
-                0.86 * Math.max(0, -nx * 0.6 + ny * 0.63 + nz * 0.48) +
-                0.3 * Math.max(0, nx)) *
-                cloud[j + 6],
-            ),
-          );
-        const color = state[3] > 0.5 ? 3 : cloud[j + 6] > 0.9 || nx > 0.55 ? 2 : nx < -0.18 ? 1 : 0;
-        ctx.fillStyle = palette[color * 32 + Math.floor(lum * 31)];
-        const r = Math.max(1, h * 0.0044);
-        ctx.fillRect(
-          w / 2 + (x * c + z * s) * p * scale * pulse,
-          h * 0.47 - (y + 0.009 * Math.sin(t)) * p * scale * pulse,
-          r,
-          r,
+        const j = i * 4;
+        const seed = (i * 0.618034) % 1;
+        const phase = seed * Math.PI * 2;
+        const travel = drift * (0.38 + 0.62 * seed);
+        const x = cloud[j] * (1 + spread * 0.43) + travel * Math.sin(rate * (1 + seed) + phase);
+        const y =
+          cloud[j + 1] * (1 + spread * 0.43) + travel * Math.cos(rate * (1.3 + seed) + phase * 2);
+        const z = cloud[j + 2] + drift * 0.55 * Math.sin(rate + phase);
+        const light =
+          cloud[j + 3] *
+          (0.78 + 0.22 * seed - 0.2 * thinking + motion * 0.16 * Math.sin(rate + phase));
+        const perspective = 3.8 / (3.8 - z * c + x * s);
+        const px = width / 2 + (x * c + z * s) * 0.455 * scale * perspective;
+        const py = height / 2 - (y - 0.055) * 0.455 * scale * perspective;
+        const radius = Math.max(
+          0.55,
+          scale * (0.001 + 0.0011 * cloud[j + 3]) * (0.77 + 0.45 * seed),
         );
+        ctx.fillStyle = error > 0.5 ? "#ff91ad" : cloud[j + 3] > 0.8 ? "#c5f5ff" : "#66cdff";
+        ctx.globalAlpha = Math.min(1, light);
+        ctx.beginPath();
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.fill();
       }
+      ctx.globalAlpha = 1;
     },
   };
 }
@@ -276,9 +173,10 @@ const targets = {
   speaking: [0, 0, 1, 0],
   error: [0, 0, 0, 1],
 };
-export function mountHead(original, readSignal, hasAudio = () => false) {
+export function mountHead(original, readSignal, hasAudio = () => false, contours) {
   let canvas = original,
     backend;
+  let cloud = makeCloud(contours);
   // Old contexts may be lost by the OS, even on devices with WebGL2.
   try {
     backend = gpu(canvas);
@@ -290,8 +188,10 @@ export function mountHead(original, readSignal, hasAudio = () => false) {
     canvas.replaceWith(fresh);
     canvas = fresh;
     backend = software(canvas);
+    backend.setCloud(cloud);
   }
-  if (!backend) useSoftware();
+  if (backend) backend.setCloud(cloud);
+  else useSoftware();
   const motion = matchMedia("(prefers-reduced-motion: reduce)");
   const low =
     navigator.hardwareConcurrency <= 2 ||
@@ -322,6 +222,8 @@ export function mountHead(original, readSignal, hasAudio = () => false) {
   function lost(e) {
     e.preventDefault();
     if (closed) return;
+    canvas.removeEventListener("webglcontextlost", lost);
+    backend.close();
     useSoftware();
     resize();
   }
@@ -348,10 +250,7 @@ export function mountHead(original, readSignal, hasAudio = () => false) {
     const blend = motion.matches ? 1 : 1 - Math.exp(-dt / 150);
     state = state.map((v, i) => v + (target[i] - v) * blend);
     converging = state.some((v, i) => Math.abs(v - target[i]) > 0.004);
-    const count = Math.min(
-      Math.floor(Math.max(0.33, quality) * sampleCount),
-      backend.name === "Canvas 2D" ? 13500 : sampleCount,
-    );
+    const count = cloud.length / 4;
     const [level, spectrum] = readSignal();
     // The two-time-constant pulse follows syllables and releases between phrases.
     const seconds = level > envelope ? 0.06 : 0.28;
@@ -363,11 +262,12 @@ export function mountHead(original, readSignal, hasAudio = () => false) {
       yaw: -0.15 + (motion.matches ? 0 : 0.1 * Math.sin(pose * 0.48) + look * 0.2),
       state,
       signal,
+      motion: motion.matches ? 0 : 1,
     });
     host.dataset.renderer = backend.name;
     host.dataset.points = count;
     host.dataset.amplitude = signal[0].toFixed(3);
-    host.dataset.displacement = ((state[2] - state[0]) * (.023 + .226 * envelope)).toFixed(3);
+    host.dataset.displacement = ((state[2] - state[0]) * (0.023 + 0.226 * envelope)).toFixed(3);
     host.dataset.frames = String(Number(host.dataset.frames || 0) + 1);
   }
   function tick(now) {
@@ -379,7 +279,8 @@ export function mountHead(original, readSignal, hasAudio = () => false) {
   function schedule(force = false) {
     if (closed || document.hidden) return;
     if (force) update(performance.now(), true);
-    if (!frame && (!motion.matches || converging || hasAudio())) frame = requestAnimationFrame(tick);
+    if (!frame && (!motion.matches || converging || hasAudio()))
+      frame = requestAnimationFrame(tick);
   }
   function visibility() {
     if (document.hidden) {
@@ -403,6 +304,11 @@ export function mountHead(original, readSignal, hasAudio = () => false) {
   document.addEventListener("visibilitychange", visibility);
   motion.addEventListener("change", visibility);
   return {
+    setContours(strokes) {
+      cloud = makeCloud(strokes);
+      backend.setCloud(cloud);
+      schedule(true);
+    },
     setState(key) {
       target = targets[key] || targets.idle;
       converging = true;
