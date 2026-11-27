@@ -1,10 +1,10 @@
 body:has(.voice-shell) {
-  background: #03070d;
+  background: #020409;
 }
 
 body:has(.voice-shell)::before {
   background:
-    radial-gradient(ellipse at 52% 46%, #0a2035 0, #070f1c 37%, transparent 72%),
+    radial-gradient(ellipse at 52% 46%, #071524 0, #050c16 37%, transparent 72%),
     linear-gradient(#04080f, #02060b 85%);
 }
 
@@ -51,7 +51,6 @@ body:has(.voice-shell)::before {
   position: relative;
   width: 100%;
   min-height: 0;
-  background: radial-gradient(ellipse at 50% 53%, #12456425, transparent 60%);
 }
 
 .voice-shell .cinematic-voice .portrait {
@@ -62,7 +61,7 @@ body:has(.voice-shell)::before {
 }
 
 .voice-shell .cinematic-voice .portrait canvas {
-  filter: drop-shadow(0 0 3px #4bc7ff50) drop-shadow(0 0 13px #2889d222);
+  filter: drop-shadow(0 0 2px #74d5ff72) drop-shadow(0 0 10px #1769cc32);
 }
 
 .portrait-placeholder {

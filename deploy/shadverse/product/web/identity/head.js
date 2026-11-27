@@ -1,52 +1,95 @@
+import { eyeHaloCount, particleStride } from "./contours.js";
 import { matrixField } from "./matrix.js";
 
 /*! Audio envelope adapted from Pipecat UI. Copyright (c) 2024–2026 Daily. BSD-2-Clause, see VOICE-NOTICES.txt. */
 const vertex = `#version 300 es
 precision highp float;
 layout(location=0) in vec4 particle;
+layout(location=1) in float emissionKind;
 uniform vec2 viewport;
 uniform vec4 state;
 uniform vec3 flow;
 uniform float time,yaw,motion;
 out float light,seed,wave;
+flat out float kind;
+out vec2 trailAxis;
 void main(){
   vec3 p = particle.xyz;
+  kind = emissionKind;
+  bool filament = kind == 2.;
+  bool halo = kind == 3.;
+  trailAxis = normalize(vec2(p.x + .001, .14 - abs(p.y)));
   seed = fract(float(gl_VertexID) * .618034);
   float phase = seed * 6.283185;
-  float hold = smoothstep(.3, .76, particle.w);
+  float hold = kind == 1. || halo ? 1. : smoothstep(.3, .76, particle.w);
   float front = smoothstep(-.12,.46,p.z);
   float ripple = sin(flow.z - p.y * 8.6 - p.z * 4.4 + p.x * 1.5);
   float offset = flow.y * (.67 + .33 * ripple * motion) - flow.x;
   p.xy *= 1. + offset * .42;
   p.z += offset * .92 + flow.y * ripple * motion * .055;
+  float pulse = sin(time * 3.1 - particle.y * 14. - abs(particle.x) * 17.);
+  if (filament) {
+    float shear = motion * (.017 + flow.y * .14) * pulse;
+    p.xy += vec2(p.x, .65 + p.y * .2) * shear;
+    p.z += shear * .6;
+  }
   float orbit = state.y * motion * (.050 - .035 * hold) * sin(time * 1.25 + p.z * 8.5 + p.y * 3.);
   p.xy += vec2(-p.y, p.x) * orbit;
   p.z += state.y * motion * (.025 - .015 * hold) * sin(time * 1.6 + p.x * 9. - p.y * 5.);
   float drift = motion * (.0045 + .004 * (state.x + state.z)) * (1. - hold * .6);
-  p += drift * vec3(sin(time * (1.2 + seed) + phase), cos(time * (1.5 + seed) + phase * 1.7),
+  if (!halo) p += drift * vec3(sin(time * (1.2 + seed) + phase), cos(time * (1.5 + seed) + phase * 1.7),
     cos(time * 1.1 + phase * 2.));
   float c = cos(yaw), s = sin(yaw);
   float z = p.z * c - p.x * s;
   float perspective = 4.1 / (4.1 - z);
   float scale = min(viewport.y, viewport.x * 1.52);
   gl_Position = vec4(vec2((p.x * c + p.z * s) * 1.13, p.y - .09) * (.887 * perspective * scale / viewport), 0., 1.);
-  gl_PointSize = clamp(scale * (.0023 + .0020 * particle.w) * (.64 + seed * .68) * perspective, 1.05, 4.6);
+  float flash = smoothstep(.935, 1., seed) * smoothstep(.47,.96,particle.w);
+  float sprite = scale * (.0023 + .0019 * particle.w + flash * .009) * (.62 + seed * .76);
+  if (kind == 1.) sprite *= 1.18;
+  if (filament) sprite *= 2.18;
+  gl_PointSize = halo ? clamp(scale * .134 * perspective, 12., 104.) : clamp(sprite * perspective, 1.05, 8.3);
   wave = (flow.y * 2.2 + state.y * .11) * (.5 + .5 * ripple) * motion;
-  light = particle.w * (.77 + .27 * seed + .10 * front + wave + state.y * .08 + motion * .06 * sin(time + phase));
+  float flicker = filament ? .22 * pulse : .10 * sin(time * (1. + seed) + phase);
+  light = particle.w * (.72 + .27 * seed + .10 * front + wave + state.y * .08 + motion * flicker);
+  if (halo) light = .96 + .12 * ripple * motion + flow.y * .52;
 }`;
 const fragment = `#version 300 es
 precision highp float;
 uniform vec4 state;
 in float light,seed,wave;
+flat in float kind;
+in vec2 trailAxis;
 out vec4 pixel;
 void main(){
   vec2 uv = gl_PointCoord * 2. - 1.;
   float d = dot(uv, uv);
   if (d > 1.) discard;
-  float alpha = min(.92, light * (1.46 * exp(-d * 5.) + .24 * exp(-d * 2.3)));
-  vec3 ice = mix(vec3(.12,.66,1.), vec3(.91,.98,1.),
-    clamp(light * .96 + seed * seed * .36 + wave, 0., 1.));
+  float alpha = min(.94, light * (1.46 * exp(-d * 5.6) + .22 * exp(-d * 2.7)));
+  vec3 ice = mix(vec3(.15,.63,1.), vec3(.88,.98,1.),
+    clamp(light * .86 + seed * seed * .37 + wave, 0., 1.));
+  if (kind == 3.) {
+    vec2 axes = abs(mat2(.986,-.166,.166,.986) * uv);
+    float rays = exp(-axes.y * 69. - axes.x * 6.3) * .25
+      + exp(-axes.x * 61. - axes.y * 10.7) * .15;
+    float core = exp(-d * 82.);
+    alpha = light * (core * .63 + rays + .19 * exp(-d * 12.) + .07 * exp(-d * 4.));
+    ice = mix(vec3(.20,.65,1.), vec3(.97,1.,1.), clamp(core + rays,0.,1.));
+  } else if (kind == 2.) {
+    float along = dot(uv, trailAxis);
+    float across = dot(uv, vec2(-trailAxis.y, trailAxis.x));
+    float spark = exp(-along * along * 3.9 - across * across * 53.);
+    alpha = min(.90, light * (.71 * spark + .21 * exp(-d * 3.)));
+    ice = mix(vec3(.17,.66,1.), vec3(.89,.98,1.), clamp(light + .15,0.,1.));
+  } else if (kind < .5 && seed > .955) {
+    vec2 axes = abs(uv);
+    float rays = exp(-axes.x * 23. - axes.y * 4.) + exp(-axes.x * 5. - axes.y * 25.);
+    alpha = min(.96, alpha + light * rays * .18);
+  } else if (kind == 1.) {
+    ice = mix(ice, vec3(.91,.99,1.), .42);
+  }
   vec3 tint = mix(ice, vec3(1.,.46,.58), state.w * .57);
+  alpha = min(.98, alpha) * (1. - smoothstep(.72,1.,d));
   pixel = vec4(tint * alpha, alpha);
 }`;
 
@@ -82,7 +125,10 @@ function gpu(canvas) {
   const buffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
   gl.enableVertexAttribArray(0);
-  gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+  const stride = particleStride * Float32Array.BYTES_PER_ELEMENT;
+  gl.vertexAttribPointer(0, 4, gl.FLOAT, false, stride, 0);
+  gl.enableVertexAttribArray(1);
+  gl.vertexAttribPointer(1, 1, gl.FLOAT, false, stride, 4 * Float32Array.BYTES_PER_ELEMENT);
   const u = Object.fromEntries(
     ["state", "time", "yaw", "viewport", "flow", "motion"].map((key) => [
       key,
@@ -91,6 +137,7 @@ function gpu(canvas) {
   );
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  let available = 0;
   return {
     name: "WebGL2",
     rasterCPU: /swiftshader|llvmpipe|software/i.test(
@@ -98,6 +145,7 @@ function gpu(canvas) {
     ),
     setCloud(cloud) {
       gl.bufferData(gl.ARRAY_BUFFER, cloud, gl.STATIC_DRAW);
+      available = cloud.length / particleStride;
     },
     draw({ count, t, yaw, state, flow, motion }) {
       gl.viewport(0, 0, canvas.width, canvas.height);
@@ -108,7 +156,10 @@ function gpu(canvas) {
       gl.uniform1f(u.motion, motion);
       gl.uniform4fv(u.state, state);
       gl.uniform3fv(u.flow, flow);
-      gl.drawArrays(gl.POINTS, 0, count);
+      if (count) {
+        gl.drawArrays(gl.POINTS, 0, count);
+        gl.drawArrays(gl.POINTS, available - eyeHaloCount, eyeHaloCount);
+      }
     },
     close() {
       gl.deleteBuffer(buffer);
@@ -137,30 +188,55 @@ function software(canvas) {
       const c = Math.cos(yaw),
         s = Math.sin(yaw);
       const [pull, push, wave] = flow;
-      ctx.fillStyle = error > 0.5 ? "#ffa6bc" : "#bcecff";
-      for (let i = 0; i < count; i++) {
-        const j = i * 4;
+      const base = error > 0.5 ? "#ffa6bc" : "#89d6ff";
+      let style = base;
+      ctx.fillStyle = style;
+      const haloStart = cloud.length / particleStride - eyeHaloCount;
+      for (let i = 0; i < count + eyeHaloCount; i++) {
+        const j = (i < count ? i : haloStart + i - count) * particleStride;
         const seed = (i * 0.618034) % 1;
         const phase = seed * Math.PI * 2;
         const brightness = cloud[j + 3];
+        const kind = cloud[j + 4];
         const ripple = Math.sin(wave - cloud[j + 1] * 8.6 - cloud[j + 2] * 4.4 + cloud[j] * 1.5);
         const offset = push * (0.67 + 0.33 * ripple * motion) - pull;
         const spin =
           motion * thinking * 0.04 * Math.sin(t * 1.25 + cloud[j + 2] * 8.5 + cloud[j + 1] * 3);
-        const drift = motion * 0.006 * (1 - brightness);
+        const drift = kind === 3 ? 0 : motion * 0.006 * (1 - brightness);
+        const current =
+          kind === 2
+            ? motion *
+              (0.017 + push * 0.14) *
+              Math.sin(t * 3.1 - cloud[j + 1] * 14 - Math.abs(cloud[j]) * 17)
+            : 0;
         const x =
-          cloud[j] * (1 + offset * 0.42) -
+          cloud[j] * (1 + offset * 0.42 + current) -
           spin * cloud[j + 1] +
           drift * Math.sin(t * (1.2 + seed) + phase);
         const y =
-          cloud[j + 1] * (1 + offset * 0.42) +
+          cloud[j + 1] * (1 + offset * 0.42 + current * 0.6) +
           spin * cloud[j] +
           drift * Math.cos(t * (1.5 + seed) + phase);
         const z = cloud[j + 2] + offset * 0.92 + motion * push * ripple * 0.055;
         const perspective = 4.1 / (4.1 - z * c + x * s);
         const px = width / 2 + (x * c + z * s) * 0.501155 * scale * perspective;
         const py = height / 2 - (y - 0.09) * 0.4435 * scale * perspective;
-        const size = Math.max(1, scale * (0.0015 + 0.0017 * brightness) * (0.65 + seed * 0.65));
+        if (kind === 3) {
+          const radius = scale * 0.076;
+          const light = ctx.createRadialGradient(px, py, 0, px, py, radius);
+          light.addColorStop(0, "#ffffffed");
+          light.addColorStop(0.15, "#9beeffa0");
+          light.addColorStop(0.46, "#3aacff3d");
+          light.addColorStop(1, "#33aaff00");
+          ctx.fillStyle = light;
+          ctx.globalAlpha = 0.93;
+          ctx.fillRect(px - radius, py - radius, radius * 2, radius * 2);
+          style = "";
+          continue;
+        }
+        const tint = brightness > 0.66 || kind === 1 ? "#e1faff" : base;
+        if (style !== tint) ctx.fillStyle = style = tint;
+        const size = Math.max(1, scale * (0.0015 + 0.002 * brightness) * (0.65 + seed * 0.65));
         ctx.globalAlpha = Math.min(0.93, brightness * (0.88 + seed * 0.31 + push * 0.7));
         ctx.fillRect(px - size / 2, py - size / 2, size, size);
       }
@@ -261,11 +337,11 @@ export function mountHead(
     state = state.map((v, i) => v + (target[i] - v) * blend);
     converging = state.some((v, i) => Math.abs(v - target[i]) > 0.004);
     const mobile = host.clientWidth < 620;
-    const available = cloud.length / 4;
+    const available = cloud.length / particleStride;
     let tier = Math.max(30000, Math.round(available * quality));
     if (mobile) tier = low || quality < 0.32 ? 10500 : 17000;
     if (backend.name === "Canvas 2D") tier = mobile ? 5200 : 8400;
-    const count = Math.min(tier, available);
+    const count = Math.max(0, Math.min(tier, available) - eyeHaloCount);
     const [level, spectrum] = readSignal();
     // The two-time-constant pulse follows syllables and releases between phrases.
     const seconds = level > envelope ? 0.06 : 0.28;
@@ -286,7 +362,7 @@ export function mountHead(
       motion: motion.matches ? 0 : 1,
     });
     host.dataset.renderer = backend.name;
-    host.dataset.points = count;
+    host.dataset.points = count ? count + eyeHaloCount : 0;
     host.dataset.amplitude = envelope.toFixed(3);
     host.dataset.displacement = (push - pull).toFixed(3);
     host.dataset.frames = String(Number(host.dataset.frames || 0) + 1);

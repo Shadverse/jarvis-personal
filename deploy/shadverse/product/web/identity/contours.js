@@ -1,6 +1,9 @@
 // The private file supplies the original hand-drawn strokes in their authoring order.
 // The bundled code supplies only the reconstruction rules.
-const pointCount = 42000;
+const pointCount = 46000;
+export const particleStride = 5;
+export const eyeHaloCount = 2;
+const emission = { eye: 1, filament: 2, halo: 3 };
 const tau = 2 * Math.PI;
 
 function curve(stroke) {
@@ -126,11 +129,19 @@ export function makeCloud(strokes) {
       shell * (0.4 + 0.08 * Math.cos((y - 0.14) * 2.4)) +
       0.105 * ridge +
       0.17 * tip +
-      0.062 * cheek -
+      0.079 * cheek -
       0.095 * socket +
       0.045 * lips +
       0.06 * chin
     );
+  }
+
+  const brow = [(eye[0][0] + eye[1][0]) / 2, (eye[0][1] + eye[1][1]) / 2 + height * 0.15];
+  const cheeks = eye.map(([x, y]) => [x * 1.25, y - height * 0.13]);
+  function reliefAt(x, y) {
+    const row = rows[clamp(Math.floor(((y - bottom) / height) * rows.length), 0, rows.length - 1)];
+    const acrossHead = clamp((2 * (x - row[1])) / Math.max(0.05, row[2] - row[1]) - 1, -1, 1);
+    return relief(x, y, acrossHead);
   }
 
   let seed = 67223;
@@ -138,11 +149,14 @@ export function makeCloud(strokes) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 4294967296;
   };
-  const cloud = new Float32Array(pointCount * 4);
+  const cloud = new Float32Array(pointCount * particleStride);
+  const filamentCount = 56 * 18;
+  const eyeCount = 2 * 164;
+  const accentStart = pointCount - filamentCount - eyeCount - eyeHaloCount;
   // The first portion samples the lit relief, two inner strata, and a dim rear cap.
   // Each iteration has the same mix so lower display tiers retain all depth layers.
   const featureCount = 6800;
-  for (let i = 0; i < pointCount - featureCount; i++) {
+  for (let i = 0; i < accentStart - featureCount; i++) {
     let row = rows[Math.floor(random() * rows.length)];
     if (random() > Math.min(1, (row[2] - row[1]) / 0.87))
       row = rows[Math.floor(random() * rows.length)];
@@ -160,7 +174,8 @@ export function makeCloud(strokes) {
     const dy = (z - north) / 0.008;
     const diffuse = Math.max(0, (0.65 * -dx + 0.52 * dy + 0.59) / Math.hypot(dx, dy, 1));
     const rim = Math.max(0, (Math.abs(acrossHead) - 0.76) / 0.24);
-    const lighting = 0.23 + 0.85 * diffuse + (0.14 + 0.14 * Math.max(0, acrossHead)) * rim;
+    const bounce = 0.1 * gauss(acrossHead - 0.66, yy + 0.21, 0.42, 0.59);
+    const lighting = 0.16 + 0.83 * diffuse + (0.23 + 0.2 * Math.max(0, acrossHead)) * rim + bounce;
     let eyeShade = 1;
     for (const [ex, ey] of eye) {
       const exd = x - ex,
@@ -189,18 +204,31 @@ export function makeCloud(strokes) {
       lighting *
       features *
       (1 + 0.32 * side * gauss(x + 0.12, yy - 0.22, 0.34, 0.52));
-    light = Math.min(0.94, light);
+    const crest = gauss(x - brow[0], yy - brow[1], 0.145, 0.175);
+    const cheeksLight = cheeks.reduce(
+      (sum, [cx, cy]) => sum + gauss(x - cx, yy - cy, 0.14, 0.095),
+      0,
+    );
+    const jaw = gauss(x - mouth[0], yy - mouth[1] + height * 0.145, 0.16, 0.085);
+    const corona = 0.82 + 0.18 * Math.sin(x * 84 + yy * 63 + 1.6 * Math.sin(yy * 55));
+    light = Math.min(
+      0.97,
+      light * corona +
+        (crest * 0.71 + cheeksLight * 0.54 + jaw * 0.25) *
+          (0.35 + 0.65 * random()) *
+          (1 - 0.42 * nostrils - 0.37 * mouthShade),
+    );
     if (layer > 0.72) {
       depth = layer < 0.91 ? z - 0.025 - 0.25 * random() : -0.34 * Math.sqrt(1 - acrossHead ** 2);
       light *= layer < 0.91 ? 0.28 : 0.12 + 0.13 * (1 - rimDepth);
     }
-    cloud.set([x, yy, depth, light], i * 4);
+    cloud.set([x, yy, depth, light, 0], i * particleStride);
   }
 
   // Glass rims, eyes, nose, mouth, and hair retain distinct depth and luminosity.
   const details = [
-    [8, 1.16, 0.077, 0.011, 0.91],
-    [9, 1.16, 0.077, 0.011, 0.91],
+    [8, 1.12, 0.077, 0.011, 0.8],
+    [9, 1.12, 0.077, 0.011, 0.8],
     [10, 0.25, 0.077, 0.009, 0.92],
     [11, 0.14, 0.06, 0.009, 0.64],
     [12, 0.12, 0.06, 0.009, 0.64],
@@ -230,7 +258,7 @@ export function makeCloud(strokes) {
     (cumulative += weight),
     ...style,
   ]);
-  for (let i = pointCount - featureCount; i < pointCount; i++) {
+  for (let i = accentStart - featureCount; i < accentStart; i++) {
     const choice = random() * cumulative;
     const [path, , offset, width, intensity] = features.find((feature) => choice < feature[1]);
     const [px, py] = path[Math.floor(random() * path.length)];
@@ -238,27 +266,88 @@ export function makeCloud(strokes) {
       radius = width * Math.sqrt(random());
     const x = px + radius * Math.cos(angle),
       y = py + radius * Math.sin(angle);
-    const row = rows[clamp(Math.floor(((y - bottom) / height) * rows.length), 0, rows.length - 1)];
-    const acrossHead = clamp((2 * (x - row[1])) / Math.max(0.05, row[2] - row[1]) - 1, -1, 1);
     cloud.set(
       [
         x,
         y,
-        relief(x, y, acrossHead) + offset + (random() - 0.5) * width,
+        reliefAt(x, y) + offset + (random() - 0.5) * width,
         intensity * (0.46 + 0.54 * random()),
+        0,
       ],
-      i * 4,
+      i * particleStride,
     );
   }
-  for (let i = pointCount - 1; i > 0; i--) {
+
+  // Bright iris particles sit at the private pupil landmarks and stay registered
+  // to the head. Each core is surrounded by a smaller number of dim radial sparks.
+  let index = accentStart;
+  for (const [ex, ey] of eye) {
+    const ez = reliefAt(ex, ey) + 0.12;
+    for (let i = 0; i < eyeCount / 2; i++) {
+      const angle = random() * tau;
+      const radius = 0.062 * random() ** 2.2;
+      const intensity = 0.38 + 0.61 * (1 - radius / 0.062) * (0.62 + 0.38 * random());
+      cloud.set(
+        [
+          ex + Math.cos(angle) * radius,
+          ey + Math.sin(angle) * radius * 0.78,
+          ez - radius * 0.28 + (random() - 0.5) * 0.017,
+          intensity,
+          emission.eye,
+        ],
+        index++ * particleStride,
+      );
+    }
+  }
+
+  const arcs = [
+    { anchor: brow, direction: Math.PI / 2, spread: 1.06, extent: 0.24 },
+    { anchor: [brow[0], top - height * 0.27], direction: Math.PI / 2, spread: 0.81, extent: 0.24 },
+    { anchor: cheeks[0], direction: 2.85, spread: 0.82, extent: 0.28 },
+    { anchor: cheeks[1], direction: 0.25, spread: 0.82, extent: 0.28 },
+  ];
+  for (let strand = 0; strand < filamentCount / 18; strand++) {
+    const {
+      anchor: [ax, ay],
+      direction,
+      spread,
+      extent,
+    } = arcs[strand % arcs.length];
+    const angle = direction + (random() - 0.5) * spread * 2;
+    const distance = extent * (0.45 + 0.73 * random());
+    const ox = ax + (random() - 0.5) * 0.23;
+    const oy = ay + (random() - 0.5) * 0.19;
+    const oz = reliefAt(ox, oy) + 0.075;
+    const bend = (random() - 0.5) * 0.085;
+    for (let j = 0; j < 18; j++) {
+      const t = (j + random()) / 18;
+      const arc = t * t * bend + Math.sin(t * 7) * 0.014;
+      cloud.set(
+        [
+          ox + Math.cos(angle) * distance * t - Math.sin(angle) * arc,
+          oy + Math.sin(angle) * distance * t + Math.cos(angle) * arc,
+          oz + 0.1 * t - 0.055 * Math.sin(t * Math.PI),
+          (0.37 + 0.62 * random()) * (1 - 0.7 * t),
+          emission.filament,
+        ],
+        index++ * particleStride,
+      );
+    }
+  }
+
+  for (let i = index - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
-    for (let component = 0; component < 4; component++) {
-      const a = i * 4 + component,
-        b = j * 4 + component;
+    for (let component = 0; component < particleStride; component++) {
+      const a = i * particleStride + component,
+        b = j * particleStride + component;
       const value = cloud[a];
       cloud[a] = cloud[b];
       cloud[b] = value;
     }
+  }
+  // Draw these separately so device density tiers retain both eye halos.
+  for (const [ex, ey] of eye) {
+    cloud.set([ex, ey, reliefAt(ex, ey) + 0.13, 0.5, emission.halo], index++ * particleStride);
   }
   return cloud;
 }
