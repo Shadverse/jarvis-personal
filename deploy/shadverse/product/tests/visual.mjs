@@ -14,6 +14,7 @@ const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM || "/usr/bin/chromium",
   args: ["--enable-unsafe-swiftshader"],
 });
+const privatePortrait = process.env.JARVIS_PRIVATE_PORTRAIT;
 let screens = 0;
 try {
   for (const [device, width, height] of [
@@ -126,14 +127,22 @@ try {
     await nav("voice");
     await snap("voice", true);
     assert.equal(await page.locator(".portrait").getAttribute("data-renderer"), "WebGL2");
-    const idlePixels = await page.locator(".portrait canvas").screenshot();
-    assert.ok(await page.evaluate(() => window.particleDraws > 0));
+    const portrait = page.locator(".portrait");
+    assert.equal(await portrait.getAttribute("data-points"), "0");
+    assert.ok(await page.locator(".portrait-placeholder").isVisible());
+    if (privatePortrait) {
+      await page.locator("summary").filter({ hasText: "چهرهٔ خصوصی" }).click();
+      await page.locator("#creator-contours").setInputFiles(privatePortrait);
+      await page.locator(".portrait-placeholder").waitFor({ state: "hidden" });
+      await page.locator("summary").filter({ hasText: "چهرهٔ خصوصی" }).click();
+      assert.ok(await page.evaluate(() => window.particleDraws > 0));
+    }
+    const idlePixels = privatePortrait && (await portrait.locator("canvas").screenshot());
     for (const state of ["listening", "thinking", "speaking", "error", "idle"]) {
       await page.click("[data-action=demo-" + state + "]");
       assert.equal(await page.locator(".voice-stage .portrait").getAttribute("data-state"), state);
       assert.equal(await page.locator(".modes [aria-pressed=true]").count(), 1);
-      const portrait = page.locator(".portrait");
-      if (state !== "idle") {
+      if (idlePixels && state !== "idle") {
         assert.notDeepEqual(await portrait.locator("canvas").screenshot(), idlePixels, state);
       }
       const still = await portrait.getAttribute("data-frames");

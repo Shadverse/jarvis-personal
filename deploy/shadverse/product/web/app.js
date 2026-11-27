@@ -2,7 +2,7 @@ import lensMap from "./art/glass-normal.png";
 import { energyCore, voiceStates } from "./core.js";
 import { icon } from "./icons.js";
 import { Signal } from "./identity/audio.js";
-import { readContours } from "./identity/contours.js";
+import { makeCloud, readContours } from "./identity/contours.js";
 import { mountHead } from "./identity/head.js";
 import { mountScope } from "./instruments.js";
 const app = document.querySelector("#app");
@@ -38,7 +38,7 @@ let workspaceEpoch = 0,
 let head = null,
   stopScope = null,
   lastPortrait = null,
-  creatorContours,
+  creatorCloud,
   voiceEpoch = 0;
 let projects = [],
   activeProject = "",
@@ -58,7 +58,7 @@ function stopAudio() {
 }
 function clearWorkspace() {
   workspaceEpoch++;
-  creatorContours = undefined;
+  creatorCloud = undefined;
   projects = [];
   activeProject = "";
   notes = [];
@@ -163,9 +163,10 @@ function voice() {
   return `<section class="voice-stage cinematic-voice" data-state="${demoState}" aria-labelledby="voice-title">
     <header class="voice-heading"><h1 id="voice-title">${label("voice")}</h1></header>
     <div class="voice-chamber">
-      <div class="voice-optic" aria-hidden="true"></div>
-      <div class="voice-floor" aria-hidden="true"></div>
       ${energyCore(demoState)}
+      <p class="portrait-placeholder" ${creatorCloud ? "hidden" : ""}>${review || session?.role === "creator"
+        ? t("برای نمایش چهره، فایل چهرهٔ خصوصی را انتخاب کنید.", "Load your private portrait to reveal the hologram.")
+        : t("چهرهٔ خصوصی در نشست سازنده در دسترس است.", "The private portrait is available in the Creator session.")}</p>
       <div class="voice-indicator"><i aria-hidden="true"></i><h2 id="state-title" aria-live="polite">${stateLabel(demoState)}</h2></div>
     </div>
     <div class="voice-dock glass">
@@ -176,14 +177,16 @@ function voice() {
         ${button("sample", icon("wave") + t("پخش نمونهٔ انگلیسی", "Play voice sample"), "mic-check")}
         ${button("main", icon("chat") + t("گفت‌وگوی متنی", "Text chat"), "voice-text-control")}
       </div>
-      <div class="signal-meter" hidden>
-        <label>${t("دامنهٔ صدا", "Audio level")}<meter min="0" max="1" value="0"></meter></label>
-        <label>${t("مرکز طیفی نسبی", "Relative spectral centroid")}<meter min="0" max="1" value="0"></meter></label>
+      <div class="voice-levels">
+        <div class="signal-meter" hidden>
+          <label>${t("دامنهٔ صدا", "Audio level")}<meter min="0" max="1" value="0"></meter></label>
+          <label>${t("طیف صدا", "Spectrum")}<meter min="0" max="1" value="0"></meter></label>
+        </div>
       </div>
       <p class="voice-note">${t("گفت‌وگوی صوتی زنده هنوز متصل نیست.", "Live voice conversation is unavailable.")}</p>
       <p class="notice" id="audio-status" role="status">${safe(micState)}</p>
     </div>
-    ${review ? `<details class="voice-review-modes" open><summary>${t("آزمایش حالت‌های حرکت", "Test motion states")}</summary>
+    <div class="voice-tools">${review ? `<details class="voice-review-modes" open><summary>${t("آزمایش حالت‌های حرکت", "Test motion states")}</summary>
       <div class="modes" role="group" aria-label="${t("حالت‌های نمایشی", "Demonstration states")}">${Object.keys(voiceStates)
         .map((key) => `<button type="button" data-action="demo-${key}" aria-pressed="${key === demoState}">${stateLabel(key)}</button>`)
         .join("")}</div>
@@ -192,9 +195,9 @@ function voice() {
       <summary>${t("چهرهٔ خصوصی", "Private portrait")}</summary>
       <label for="creator-contours">${t("فایل خطوط چهره", "Portrait contours file")}</label>
       <input id="creator-contours" type="file" accept=".json,application/json">
-      <p id="contour-status" role="status">${creatorContours ? t("چهرهٔ خصوصی فعال است.", "Private portrait is active.") : ""}</p>
+      <p id="contour-status" role="status">${creatorCloud ? t("چهرهٔ خصوصی فعال است.", "Private portrait is active.") : ""}</p>
     </details>` : ""}
-    <a class="voice-credits" href="./identity/VOICE-NOTICES.txt" target="_blank" rel="noopener">${t("منابع و مجوزها", "Sources and licenses")}</a>
+    <a class="voice-credits" href="./identity/VOICE-NOTICES.txt" target="_blank" rel="noopener">${t("منابع و مجوزها", "Sources and licenses")}</a></div>
   </section>`;
 }
 function syncVoice() {
@@ -302,7 +305,7 @@ function admin() {
 }
 function shell() {
   const creator = session?.role === "creator" || review;
-  return `<div class="shell${page === "voice" ? " voice-shell" : ""}"><button class="scrim ${drawer ? "open" : ""}" aria-label="${t("بستن منو", "Close menu")}" data-action="menu"></button><aside class="rail glass ${drawer ? "open" : ""}">${button("menu", icon("close"), "iconbtn drawerclose")}${brand()}
+  return `<div class="shell${page === "voice" ? " voice-shell" : ""}">${page === "voice" ? '<canvas class="voice-matrix" aria-hidden="true"></canvas>' : ""}<button class="scrim ${drawer ? "open" : ""}" aria-label="${t("بستن منو", "Close menu")}" data-action="menu"></button><aside class="rail glass ${drawer ? "open" : ""}">${button("menu", icon("close"), "iconbtn drawerclose")}${brand()}
  <nav class="navgroup"><small>${t("محیط شخصی", "Personal space")}</small>${["main", "voice", "workspace", "monitor"].map(nav).join("")}</nav>
  <nav class="navgroup"><small>${t("حساب کاربری", "Account")}</small>${nav("plans")}${creator ? nav("admin") : ""}</nav>
  <div class="railbottom"><span class="pill">${icon("user")}${review ? previewLabel() : `<bdi>${safe(session.name)}</bdi>`}</span>${button("logout", icon("logout") + t("خروج", "Sign out"), "navbtn")}</div></aside>
@@ -326,7 +329,7 @@ function render() {
 
   const canvas = app.querySelector(".portrait canvas");
   if (canvas) {
-    head = mountHead(canvas, () => signal.read(), () => signal.mode !== "off", creatorContours);
+    head = mountHead(canvas, () => signal.read(), () => signal.mode !== "off", creatorCloud);
     head.setState(page === "voice" ? demoState : "idle");
   }
   const scope = app.querySelector("#scope");
@@ -648,8 +651,10 @@ app.addEventListener("change", async (event) => {
       if (file.size > 100_000) throw Error("Contour file too large");
       const strokes = readContours(await file.text());
       if (portrait !== head || event.target.files[0] !== file) return;
-      portrait.setContours(strokes);
-      creatorContours = strokes;
+      const cloud = makeCloud(strokes);
+      portrait.setCloud(cloud);
+      creatorCloud = cloud;
+      app.querySelector(".portrait-placeholder").hidden = true;
       status.textContent = t("چهرهٔ خصوصی فعال است.", "Private portrait is active.");
     } catch {
       if (event.target.files[0] === file)

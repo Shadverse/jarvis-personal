@@ -1,46 +1,52 @@
-import { makeCloud } from "./contours.js";
+import { matrixField } from "./matrix.js";
 
 /*! Audio envelope adapted from Pipecat UI. Copyright (c) 2024–2026 Daily. BSD-2-Clause, see VOICE-NOTICES.txt. */
 const vertex = `#version 300 es
 precision highp float;
 layout(location=0) in vec4 particle;
-uniform vec2 viewport,signal;
+uniform vec2 viewport;
 uniform vec4 state;
+uniform vec3 flow;
 uniform float time,yaw,motion;
-out float light,seed;
+out float light,seed,wave;
 void main(){
   vec3 p = particle.xyz;
   seed = fract(float(gl_VertexID) * .618034);
   float phase = seed * 6.283185;
-  float spread = (state.z - state.x) * (.023 + .226 * signal.x);
-  float drift = motion * (.006 + state.x * (.025 + .10 * signal.x)
-    + state.z * (.048 + .16 * signal.x) + state.y * .021);
-  float rate = time * (1.5 + state.x * 3.5 + state.z * 5. + signal.y * 2.);
-  float variation = .38 + .62 * seed;
-  p.xy *= 1. + spread * .43;
-  p.xy += drift * variation * vec2(sin(rate * (1. + seed) + phase),
-    cos(rate * (1.3 + seed) + phase * 2.));
-  p.z += drift * .55 * sin(rate + phase);
+  float hold = smoothstep(.3, .76, particle.w);
+  float front = smoothstep(-.12,.46,p.z);
+  float ripple = sin(flow.z - p.y * 8.6 - p.z * 4.4 + p.x * 1.5);
+  float offset = flow.y * (.67 + .33 * ripple * motion) - flow.x;
+  p.xy *= 1. + offset * .42;
+  p.z += offset * .92 + flow.y * ripple * motion * .055;
+  float orbit = state.y * motion * (.050 - .035 * hold) * sin(time * 1.25 + p.z * 8.5 + p.y * 3.);
+  p.xy += vec2(-p.y, p.x) * orbit;
+  p.z += state.y * motion * (.025 - .015 * hold) * sin(time * 1.6 + p.x * 9. - p.y * 5.);
+  float drift = motion * (.0045 + .004 * (state.x + state.z)) * (1. - hold * .6);
+  p += drift * vec3(sin(time * (1.2 + seed) + phase), cos(time * (1.5 + seed) + phase * 1.7),
+    cos(time * 1.1 + phase * 2.));
   float c = cos(yaw), s = sin(yaw);
   float z = p.z * c - p.x * s;
-  float perspective = 3.8 / (3.8 - z);
-  float scale = min(viewport.y, viewport.x * 1.42);
-  gl_Position = vec4(vec2(p.x * c + p.z * s, p.y - .055) * (.91 * perspective * scale / viewport), 0., 1.);
-  gl_PointSize = max(1.5, scale * (.0043 + .0048 * particle.w) * (.8 + .42 * seed));
-  light = particle.w * (.78 + .22 * seed - .20 * state.y + motion * .16 * sin(rate + phase));
+  float perspective = 4.1 / (4.1 - z);
+  float scale = min(viewport.y, viewport.x * 1.52);
+  gl_Position = vec4(vec2((p.x * c + p.z * s) * 1.13, p.y - .09) * (.887 * perspective * scale / viewport), 0., 1.);
+  gl_PointSize = clamp(scale * (.0023 + .0020 * particle.w) * (.64 + seed * .68) * perspective, 1.05, 4.6);
+  wave = (flow.y * 2.2 + state.y * .11) * (.5 + .5 * ripple) * motion;
+  light = particle.w * (.77 + .27 * seed + .10 * front + wave + state.y * .08 + motion * .06 * sin(time + phase));
 }`;
 const fragment = `#version 300 es
 precision highp float;
 uniform vec4 state;
-in float light,seed;
+in float light,seed,wave;
 out vec4 pixel;
 void main(){
   vec2 uv = gl_PointCoord * 2. - 1.;
   float d = dot(uv, uv);
   if (d > 1.) discard;
-  float alpha = min(1., light * (1.48 * exp(-d * 5.0) + .29 * exp(-d * 2.8)));
-  vec3 ice = mix(vec3(.26,.77,1.), vec3(.86,.97,1.), min(1., light * (.74 + .4 * seed)));
-  vec3 tint = mix(ice, vec3(1.,.48,.62), state.w * .7);
+  float alpha = min(.92, light * (1.46 * exp(-d * 5.) + .24 * exp(-d * 2.3)));
+  vec3 ice = mix(vec3(.12,.66,1.), vec3(.91,.98,1.),
+    clamp(light * .96 + seed * seed * .36 + wave, 0., 1.));
+  vec3 tint = mix(ice, vec3(1.,.46,.58), state.w * .57);
   pixel = vec4(tint * alpha, alpha);
 }`;
 
@@ -78,7 +84,7 @@ function gpu(canvas) {
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
   const u = Object.fromEntries(
-    ["state", "time", "yaw", "viewport", "signal", "motion"].map((key) => [
+    ["state", "time", "yaw", "viewport", "flow", "motion"].map((key) => [
       key,
       gl.getUniformLocation(program, key),
     ]),
@@ -93,7 +99,7 @@ function gpu(canvas) {
     setCloud(cloud) {
       gl.bufferData(gl.ARRAY_BUFFER, cloud, gl.STATIC_DRAW);
     },
-    draw({ count, t, yaw, state, signal, motion }) {
+    draw({ count, t, yaw, state, flow, motion }) {
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.uniform2f(u.viewport, canvas.width, canvas.height);
@@ -101,7 +107,7 @@ function gpu(canvas) {
       gl.uniform1f(u.yaw, yaw);
       gl.uniform1f(u.motion, motion);
       gl.uniform4fv(u.state, state);
-      gl.uniform2fv(u.signal, signal);
+      gl.uniform3fv(u.flow, flow);
       gl.drawArrays(gl.POINTS, 0, count);
     },
     close() {
@@ -122,45 +128,41 @@ function software(canvas) {
       cloud = points;
     },
     close() {},
-    draw({ count, t, yaw, state, signal, motion }) {
-      const [listening, thinking, speaking, error] = state;
+    draw({ count, t, yaw, state, flow, motion }) {
+      const [, thinking, , error] = state;
       const { width, height } = canvas;
       ctx.clearRect(0, 0, width, height);
-      const scale = Math.min(height, width * 1.42);
+      if (!count) return;
+      const scale = Math.min(height, width * 1.52);
       const c = Math.cos(yaw),
         s = Math.sin(yaw);
-      const spread = (speaking - listening) * (0.023 + 0.226 * signal[0]);
-      const drift =
-        motion *
-        (0.006 +
-          listening * (0.025 + 0.1 * signal[0]) +
-          speaking * (0.048 + 0.16 * signal[0]) +
-          thinking * 0.021);
-      const rate = t * (1.5 + listening * 3.5 + speaking * 5 + signal[1] * 2);
+      const [pull, push, wave] = flow;
+      ctx.fillStyle = error > 0.5 ? "#ffa6bc" : "#bcecff";
       for (let i = 0; i < count; i++) {
         const j = i * 4;
         const seed = (i * 0.618034) % 1;
         const phase = seed * Math.PI * 2;
-        const travel = drift * (0.38 + 0.62 * seed);
-        const x = cloud[j] * (1 + spread * 0.43) + travel * Math.sin(rate * (1 + seed) + phase);
+        const brightness = cloud[j + 3];
+        const ripple = Math.sin(wave - cloud[j + 1] * 8.6 - cloud[j + 2] * 4.4 + cloud[j] * 1.5);
+        const offset = push * (0.67 + 0.33 * ripple * motion) - pull;
+        const spin =
+          motion * thinking * 0.04 * Math.sin(t * 1.25 + cloud[j + 2] * 8.5 + cloud[j + 1] * 3);
+        const drift = motion * 0.006 * (1 - brightness);
+        const x =
+          cloud[j] * (1 + offset * 0.42) -
+          spin * cloud[j + 1] +
+          drift * Math.sin(t * (1.2 + seed) + phase);
         const y =
-          cloud[j + 1] * (1 + spread * 0.43) + travel * Math.cos(rate * (1.3 + seed) + phase * 2);
-        const z = cloud[j + 2] + drift * 0.55 * Math.sin(rate + phase);
-        const light =
-          cloud[j + 3] *
-          (0.78 + 0.22 * seed - 0.2 * thinking + motion * 0.16 * Math.sin(rate + phase));
-        const perspective = 3.8 / (3.8 - z * c + x * s);
-        const px = width / 2 + (x * c + z * s) * 0.455 * scale * perspective;
-        const py = height / 2 - (y - 0.055) * 0.455 * scale * perspective;
-        const radius = Math.max(
-          0.55,
-          scale * (0.001 + 0.0011 * cloud[j + 3]) * (0.77 + 0.45 * seed),
-        );
-        ctx.fillStyle = error > 0.5 ? "#ff91ad" : cloud[j + 3] > 0.8 ? "#c5f5ff" : "#66cdff";
-        ctx.globalAlpha = Math.min(1, light);
-        ctx.beginPath();
-        ctx.arc(px, py, radius, 0, Math.PI * 2);
-        ctx.fill();
+          cloud[j + 1] * (1 + offset * 0.42) +
+          spin * cloud[j] +
+          drift * Math.cos(t * (1.5 + seed) + phase);
+        const z = cloud[j + 2] + offset * 0.92 + motion * push * ripple * 0.055;
+        const perspective = 4.1 / (4.1 - z * c + x * s);
+        const px = width / 2 + (x * c + z * s) * 0.501155 * scale * perspective;
+        const py = height / 2 - (y - 0.09) * 0.4435 * scale * perspective;
+        const size = Math.max(1, scale * (0.0015 + 0.0017 * brightness) * (0.65 + seed * 0.65));
+        ctx.globalAlpha = Math.min(0.93, brightness * (0.88 + seed * 0.31 + push * 0.7));
+        ctx.fillRect(px - size / 2, py - size / 2, size, size);
       }
       ctx.globalAlpha = 1;
     },
@@ -173,10 +175,14 @@ const targets = {
   speaking: [0, 0, 1, 0],
   error: [0, 0, 0, 1],
 };
-export function mountHead(original, readSignal, hasAudio = () => false, contours) {
+export function mountHead(
+  original,
+  readSignal,
+  hasAudio = () => false,
+  cloud = new Float32Array(0),
+) {
   let canvas = original,
     backend;
-  let cloud = makeCloud(contours);
   // Old contexts may be lost by the OS, even on devices with WebGL2.
   try {
     backend = gpu(canvas);
@@ -207,8 +213,11 @@ export function mountHead(original, readSignal, hasAudio = () => false, contours
     look = 0,
     quality = low ? 0.4 : backend.rasterCPU && !motion.matches ? 0.42 : 1,
     envelope = 0,
+    wave = 0,
     converging = false;
   const host = canvas.parentElement;
+  const backdrop = host.closest(".voice-shell").querySelector(".voice-matrix");
+  const field = matrixField(backdrop);
   function resize() {
     const dpr = Math.min(
         devicePixelRatio,
@@ -217,6 +226,7 @@ export function mountHead(original, readSignal, hasAudio = () => false, contours
       box = host.getBoundingClientRect();
     canvas.width = Math.max(1, Math.round(box.width * dpr));
     canvas.height = Math.max(1, Math.round(box.height * dpr));
+    field.resize();
     schedule(true);
   }
   function lost(e) {
@@ -250,24 +260,35 @@ export function mountHead(original, readSignal, hasAudio = () => false, contours
     const blend = motion.matches ? 1 : 1 - Math.exp(-dt / 150);
     state = state.map((v, i) => v + (target[i] - v) * blend);
     converging = state.some((v, i) => Math.abs(v - target[i]) > 0.004);
-    const count = cloud.length / 4;
+    const mobile = host.clientWidth < 620;
+    const available = cloud.length / 4;
+    let tier = Math.max(30000, Math.round(available * quality));
+    if (mobile) tier = low || quality < 0.32 ? 10500 : 17000;
+    if (backend.name === "Canvas 2D") tier = mobile ? 5200 : 8400;
+    const count = Math.min(tier, available);
     const [level, spectrum] = readSignal();
     // The two-time-constant pulse follows syllables and releases between phrases.
     const seconds = level > envelope ? 0.06 : 0.28;
     envelope += (level - envelope) * (1 - Math.exp(-Math.min(dt / 1000, 0.1) / seconds));
-    const signal = [envelope, spectrum];
+    const strength = Math.min(1, Math.sqrt(envelope * 1.7));
+    const pull = state[0] * (0.018 + 0.15 * strength);
+    const push = state[2] * (0.022 + 0.22 * strength);
+    if (!motion.matches)
+      wave = (wave + (dt / 1000) * (3.2 + 1.5 * spectrum + 2.1 * strength)) % (Math.PI * 2);
+    field.draw(motion.matches ? 0 : pose, force);
+
     backend.draw({
       count,
       t: pose,
-      yaw: -0.15 + (motion.matches ? 0 : 0.1 * Math.sin(pose * 0.48) + look * 0.2),
+      yaw: -0.062 + (motion.matches ? 0 : 0.06 * Math.sin(pose * 0.52) + look * 0.11),
       state,
-      signal,
+      flow: [pull, push, wave],
       motion: motion.matches ? 0 : 1,
     });
     host.dataset.renderer = backend.name;
     host.dataset.points = count;
-    host.dataset.amplitude = signal[0].toFixed(3);
-    host.dataset.displacement = ((state[2] - state[0]) * (0.023 + 0.226 * envelope)).toFixed(3);
+    host.dataset.amplitude = envelope.toFixed(3);
+    host.dataset.displacement = (push - pull).toFixed(3);
     host.dataset.frames = String(Number(host.dataset.frames || 0) + 1);
   }
   function tick(now) {
@@ -298,14 +319,15 @@ export function mountHead(original, readSignal, hasAudio = () => false, contours
   };
   const observer = new ResizeObserver(resize);
   observer.observe(host);
+  observer.observe(backdrop);
   resize();
   host.addEventListener("pointermove", pointer);
   host.addEventListener("pointerleave", leave);
   document.addEventListener("visibilitychange", visibility);
   motion.addEventListener("change", visibility);
   return {
-    setContours(strokes) {
-      cloud = makeCloud(strokes);
+    setCloud(points) {
+      cloud = points;
       backend.setCloud(cloud);
       schedule(true);
     },
