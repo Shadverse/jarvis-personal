@@ -19,7 +19,7 @@ Contrast compares the computed text color with the sampled background under the 
 | 390 × 844  | main         |             3 |               0.50 px |                 15.11 |
 | 390 × 844  | voice        |             4 |               0.50 px |                 10.02 |
 | 390 × 844  | workspace    |             4 |               1.00 px |                 12.19 |
-| 390 × 844  | monitor      |             4 |               0.50 px |                 11.28 |
+| 390 × 844  | monitor      |             4 |               0.50 px |                 10.32 |
 | 390 × 844  | subscription |            11 |               0.50 px |                 11.35 |
 | 390 × 844  | admin        |             8 |               0.00 px |                 11.09 |
 | 393 × 852  | login        |             7 |               0.50 px |                  5.27 |
@@ -27,7 +27,7 @@ Contrast compares the computed text color with the sampled background under the 
 | 393 × 852  | main         |             3 |               0.50 px |                 14.90 |
 | 393 × 852  | voice        |             4 |               0.50 px |                 10.02 |
 | 393 × 852  | workspace    |             4 |               0.50 px |                 12.19 |
-| 393 × 852  | monitor      |             4 |               0.50 px |                 11.31 |
+| 393 × 852  | monitor      |             4 |               0.50 px |                 10.72 |
 | 393 × 852  | subscription |            11 |               0.50 px |                 11.37 |
 | 393 × 852  | admin        |             8 |               0.50 px |                 11.18 |
 

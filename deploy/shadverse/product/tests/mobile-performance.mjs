@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
+import { stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 const requireUi = createRequire(new URL("../../../../ui/package.json", import.meta.url));
 const browser = await requireUi("playwright").chromium.launch({
@@ -83,7 +83,9 @@ try {
   const page = await fallback.newPage();
   await page.goto("http://localhost:3000/review");
   await page.click("[data-action=review]");
-  assert.ok(Number(await page.locator(".portrait").getAttribute("data-points")) < 56000);
+  const fullCount = (await stat(new URL("../web/identity/face.points", import.meta.url))).size / 10;
+  const tierCount = Number(await page.locator(".portrait").getAttribute("data-points"));
+  assert.ok(tierCount > 0 && tierCount < fullCount);
   await fallback.close();
   const portable = await browser.newContext({ reducedMotion: "reduce" });
   await portable.addInitScript(() => {

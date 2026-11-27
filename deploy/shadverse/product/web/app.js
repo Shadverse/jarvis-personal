@@ -245,7 +245,7 @@ function monitor() {
   return (
     title("monitor") +
     `<section class="surface stack"><h2>${t("زمان هر فریم مرورگر", "Browser frame interval")}</h2><p class="sub">${t("اندازه‌گیری زنده در همین زبانه", "Live measurements from this tab")}</p>
- <div class="instrument" id="scope"><div class="split"><output dir="auto">—</output><button class="outline" type="button" aria-pressed="false">${t("مکث", "Pause")}</button></div><canvas tabindex="0" aria-label="${t("نمودار زمان فریم؛ برای مرور از کلیدهای جهت استفاده کنید.", "Frame interval chart. Inspect with arrow keys.")}"></canvas><p class="trace-detail"></p></div>
+ <div class="instrument" id="scope"><div class="split"><output dir="auto">—</output><button class="outline" type="button" aria-pressed="false">${t("مکث", "Pause")}</button></div><canvas tabindex="0" aria-label="${t("نمودار زمان فریم؛ برای مرور از کلیدهای جهت استفاده کنید.", "Frame interval chart. Inspect with arrow keys.")}"></canvas><dl class="trace-stats"><div><dt>${t("میانه", "Median")}</dt><dd data-stat="median">—</dd></div><div><dt>${t("بیشینه", "Peak")}</dt><dd data-stat="peak">—</dd></div><div><dt>${t("بازهٔ ثبت", "Window")}</dt><dd data-stat="window">—</dd></div></dl><p class="trace-detail"></p></div>
  <div class="readouts">${cards.map(([k, v]) => `<div><span>${k}</span><bdi>${safe(v)}</bdi></div>`).join("")}</div></section>`
   );
 }

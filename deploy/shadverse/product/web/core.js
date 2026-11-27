@@ -6,5 +6,5 @@ export const voiceStates = {
   error: ["خطا", "Error"],
 };
 export function energyCore(state = "idle") {
-  return `<div class="portrait" data-state="${state}" role="img" aria-label="${document.documentElement.lang === "en" ? "JARVIS mechanical head with luminous particles" : "سرِ مکانیکی جارویس با ذرات نورانی"}"><canvas aria-hidden="true"></canvas></div>`;
+  return `<div class="portrait" data-state="${state}" role="img" aria-label="${document.documentElement.lang === "en" ? "Three-dimensional JARVIS face in luminous particles" : "چهرهٔ سه‌بعدی جارویس از ذرات نورانی"}"><canvas aria-hidden="true"></canvas></div>`;
 }

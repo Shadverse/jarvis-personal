@@ -13,6 +13,9 @@ export function mountScope(panel, fa) {
     selected = null;
   const value = panel.querySelector("output"),
     detail = panel.querySelector(".trace-detail");
+  const medianValue = panel.querySelector("[data-stat=median]");
+  const peakValue = panel.querySelector("[data-stat=peak]");
+  const windowValue = panel.querySelector("[data-stat=window]");
   function paint() {
     const box = canvas.getBoundingClientRect(),
       w = box.width,
@@ -38,6 +41,21 @@ export function mountScope(panel, fa) {
       ctx.stroke();
     }
     if (!data.length) return;
+    const sorted = [...data].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const median = (sorted[mid] + sorted[(sorted.length - 1) >> 1]) / 2;
+    medianValue.textContent = numbers.format(median) + " " + ms;
+    peakValue.textContent = numbers.format(sorted.at(-1)) + " " + ms;
+    windowValue.textContent =
+      numbers.format(data.reduce((a, b) => a + b, 0) / 1000) + (fa ? " ثانیه" : " s");
+    ctx.save();
+    ctx.setLineDash([3, 5]);
+    ctx.strokeStyle = "#c786f399";
+    ctx.beginPath();
+    ctx.moveTo(left, y(median));
+    ctx.lineTo(right, y(median));
+    ctx.stroke();
+    ctx.restore();
     const line = new Path2D();
     data.forEach((n, i) => (i ? line.lineTo(x(i), y(n)) : line.moveTo(x(i), y(n))));
     const fill = new Path2D(line);
@@ -51,7 +69,11 @@ export function mountScope(panel, fa) {
     ctx.fill(fill);
     ctx.strokeStyle = "#69e5ff";
     ctx.lineWidth = 2;
+    ctx.save();
+    ctx.shadowColor = "#26c7ff";
+    ctx.shadowBlur = 5;
     ctx.stroke(line);
+    ctx.restore();
     const i = Math.min(data.length - 1, selected ?? data.length - 1);
     ctx.fillStyle = "#fff";
     ctx.beginPath();

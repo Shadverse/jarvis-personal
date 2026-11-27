@@ -1,93 +1,76 @@
-import mesh from "./chassis.mesh";
-import packed from "./chassis.points";
+import mesh from "./face.mesh";
+import packed from "./face.points";
 const meshSize = new DataView(mesh.buffer, mesh.byteOffset, 4).getUint32(0, true);
 const meshBytes = meshSize * 10;
 const surface = mesh.subarray(4, 4 + meshBytes);
 const indices = mesh.subarray(4 + meshBytes);
-const stride = 12;
+const stride = 10;
 export const sampleCount = packed.length / stride;
-const view = new DataView(packed.buffer, packed.byteOffset, packed.byteLength);
-const cloud = new Float32Array(sampleCount * 8);
-for (let i = 0; i < sampleCount; i++) {
-  for (let k = 0; k < 3; k++) {
-    cloud[8 * i + k] = view.getInt16(i * stride + k * 2, true) / 22000;
-    cloud[8 * i + 3 + k] = view.getInt8(i * stride + 6 + k) / 127;
-  }
-  cloud[8 * i + 6] = packed[i * stride + 9] / 255;
-  cloud[8 * i + 7] = packed[i * stride + 10];
-}
-
 const vertex = `#version 300 es
 precision highp float;
 layout(location=0) in vec3 position;
 layout(location=1) in vec3 normal;
 layout(location=2) in float visibility;
-layout(location=3) in float material;
 uniform vec2 viewport,signal;
 uniform vec4 state;
 uniform float time,yaw,sprite,pass;
 out vec3 N,P;
-flat out int mat;
-out float seed,energy;
+out float seed,energy,stream,veil;
 void main(){
- vec3 p=position*(pass<.5?32767./22000.:1.);
+ vec3 p=position*(32767./22000.);
  seed=fract(float(gl_VertexID)*.618034);
- mat=int(material+.5);
- float wave=sin(6.*p.y+4.*p.x-time*2.);
- float inward=state.x*(.013+.14*signal.x),outward=state.z*(.013+.17*signal.x);
- // The plates move together. The optical grain can separate from the chassis.
- float detach=pass>.5?1.:.18;
- p+=normal*(outward-inward)*detach*(.78+.22*sin(p.y*9.+signal.y*5.));
- p.z+=detach*(outward-inward)*(1.+signal.y*.6);
- if(pass>.5){
-   p+=normal*.004;
-   p+=normal*smoothstep(.94,1.,seed)*(.018+.046*state.y)*(.6+.4*wave);
- }
- float angle=yaw+.055*wave*state.y*detach;
- mat2 turn=mat2(cos(angle),-sin(angle),sin(angle),cos(angle));
+ float azimuth=atan(p.x,p.z);
+ float phase=9.*p.y+3.*azimuth-time*2.4;
+ stream=pow(.5+.5*cos(phase+1.4*sin(3.*azimuth-time*.45)),5.);
+ float pulse=(state.z-state.x)*(.045+.155*signal.x)*(.86+.14*cos(p.y*6.+signal.y*5.));
+ p.xy*=1.+pulse*.52;
+ p+=normal*pulse*.48;
+ p.z+=pulse*(1.+signal.y*.55);
+ p*=1.+.008*sin(time*1.1);
+ // A travelling wave displaces the contours tangentially in the thinking pose.
+ vec3 tangent=vec3(p.z,0.,-p.x);
+ p+=state.y*stream*(.052*tangent+normal*.012);
+ veil=pass*smoothstep(.953,.998,seed);
+ p+=normal*(pass*.004+veil*(.035+.15*seed)*(.6+.4*sin(phase)));
+ p.y+=veil*(.055+.047*sin(time*.86+seed*15.));
+ p.x+=veil*.04*cos(phase);
+ mat2 turn=mat2(cos(yaw),-sin(yaw),sin(yaw),cos(yaw));
  p.xz=turn*p.xz;vec3 n=normal;n.xz=turn*n.xz;
- p.y+=.010*sin(time*1.3);
- float perspective=3.8/(3.8-p.z);
- gl_Position=vec4(p.x*perspective*viewport.y/viewport.x,p.y*perspective,-p.z*.43,1.);
- gl_PointSize=clamp(viewport.y*.0088*sprite*(.70+.6*seed)*perspective,1.,18.);
- N=n;P=p;energy=visibility*(.76+.24*wave*state.y);
+ float perspective=3.64/(3.8-p.z);
+ gl_Position=vec4(p.x*perspective*viewport.y/viewport.x,p.y*perspective,-p.z*.43-pass*.002,1.);
+ gl_PointSize=clamp(viewport.y*.0067*sprite*(.75+.54*seed)*perspective,1.15,16.);
+ N=n;P=p;energy=visibility;
 }`;
 const fragment = `#version 300 es
 precision highp float;
 uniform float pass;
-uniform vec2 signal;
 uniform vec4 state;
 in vec3 N,P;
-flat in int mat;
-in float seed,energy;
+in float seed,energy,stream,veil;
 out vec4 pixel;
 void main(){
- vec3 n=normalize(N),viewDir=normalize(vec3(0.,0.,3.8)-P),r=reflect(-viewDir,n);
- float fres=pow(1.-clamp(dot(n,viewDir),0.,1.),3.);
- float key=clamp(dot(n,normalize(vec3(-.61,.81,.54))),0.,1.);
- float side=clamp(dot(n,normalize(vec3(.89,.20,.32))),0.,1.);
- // Two elongated studio reflections and a fine white strip reveal each bevel.
- float panel=exp(-pow((r.y+.21*r.x-.37)/.17,2.));
- float strip=exp(-pow((r.x-.22*r.y+.50)/.046,2.));
- float broad=exp(-pow((r.x+.33)/.51,2.))*clamp(.60+.4*r.y,0.,1.);
- vec3 violet=vec3(.45,.19,.98),cyan=vec3(.10,.72,1.),pink=vec3(.98,.20,.76);
- vec3 base=mat==0?vec3(.055,.062,.094):mat==1?vec3(.23,.17,.36):mat==2?vec3(.43,.44,.56):mat==6?vec3(.035,.041,.068):vec3(.34,.35,.44);
- vec3 reflection=panel*vec3(.22,.26,.38)+strip*vec3(.44,.50,.69)+broad*vec3(.15,.045,.22)+side*side*vec3(.025,.16,.22);
- vec3 metal=base*(.33+.78*key)+reflection*(mat==6?.16:1.)+fres*(.09*violet+.12*cyan);
- if(mat==3)metal=vec3(.022,.029,.064)+reflection*.46+fres*cyan*.26;
- if(mat==4)metal=mix(vec3(.10,.84,1.),vec3(.78,1.,1.),.36+.26*key+.34*signal.x);
- if(mat==5)metal=vec3(.96,.18,.71);
- metal=mix(metal,metal*vec3(1.24,.68,.69),state.w*.7);
- if(pass<.5){pixel=vec4(metal,.99);return;}
- vec2 point=gl_PointCoord*2.-1.;float rr=dot(point,point);
- if(rr>1.||dot(n,viewDir)<-.09)discard;
- float glow=exp(-rr*14.)+.12*exp(-rr*3.4);
- vec3 tint=mix(mix(violet,pink,clamp(.4-.9*P.x,0.,1.)),cyan,side*.71);
- tint=mix(tint,vec3(.88,.96,1.),pow(seed,11.)*.67+key*.16);
- if(mat==4||mat==5)tint=metal;
- float light=(mat==3?.10:mat==6?.22:1.)*energy*(.26+.67*key+.43*fres+.38*side)*(.65+.60*seed);
- float a=clamp(glow*light,0.,1.);
- pixel=vec4(tint*a*1.48,a);
+ if(pass<.5){pixel=vec4(0.);return;}
+ vec2 uv=gl_PointCoord*2.-1.;
+ float d=dot(uv,uv);
+ if(d>1.)discard;
+ vec3 n=normalize(N);
+ float facing=dot(n,normalize(vec3(0.,0.,3.8)-P));
+ if(facing<-.06)discard;
+ float key=max(0.,dot(n,normalize(vec3(-.64,.67,.49))));
+ float edge=pow(1.-max(facing,0.),2.);
+ float blue=max(0.,dot(n,normalize(vec3(.91,.29,-.18))));
+ float pearl=pow(max(0.,dot(n,normalize(vec3(-.42,.72,.77)))),9.);
+ vec3 tint=mix(vec3(.48,.10,1.),vec3(1.,.12,.80),smoothstep(-.12,.83,key));
+ tint=mix(tint,vec3(.18,.81,1.),blue*blue*.87);
+ tint=mix(tint,vec3(1.,.93,1.),pearl*.72+pow(seed,17.)*.2);
+ tint=mix(tint,vec3(.97,.37,.60),state.w*.48);
+ float lum=pow(energy,1.3)*(.23+.86*key+.45*blue+.72*edge+.55*pearl);
+ // Dissolve the neckline and let the supraorbital ridge and lips catch a softer fill.
+ lum+=.28*energy*max(0.,dot(n,normalize(vec3(.37,.38,.84))));
+ lum*=smoothstep(-1.01,-.61,P.y);
+ lum*=.72+.55*seed+.8*state.y*stream;
+ float a=clamp((exp(-d*5.)+.14*exp(-d*2.))*lum*(1.-.56*veil),0.,1.);
+ pixel=vec4(tint*a*1.55,a);
 }`;
 function gpu(canvas) {
   const gl = canvas.getContext("webgl2", {
@@ -125,28 +108,23 @@ function gpu(canvas) {
     gl.bindBuffer(target, buffer);
     gl.bufferData(target, data, gl.STATIC_DRAW);
   }
-  function attribute(loc, size, stride, offset) {
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, stride, offset);
-  }
-  gl.bindVertexArray(pointVao);
-  upload(gl.ARRAY_BUFFER, cloud);
-  attribute(0, 3, 32, 0);
-  attribute(1, 3, 32, 12);
-  attribute(2, 1, 32, 24);
-  attribute(3, 1, 32, 28);
-  gl.bindVertexArray(surfaceVao);
-  upload(gl.ARRAY_BUFFER, surface);
-  upload(gl.ELEMENT_ARRAY_BUFFER, indices);
-  for (const [loc, size, type, normalized, offset] of [
-    [0, 3, gl.SHORT, true, 0],
-    [1, 3, gl.BYTE, true, 6],
-    [3, 1, gl.UNSIGNED_BYTE, false, 9],
+  // Both buffers use the same quantized coordinates and normals.
+  for (const [vao, data] of [
+    [pointVao, packed],
+    [surfaceVao, surface],
   ]) {
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, size, type, normalized, 10, offset);
+    gl.bindVertexArray(vao);
+    upload(gl.ARRAY_BUFFER, data);
+    for (const [loc, size, type, offset] of [
+      [0, 3, gl.SHORT, 0],
+      [1, 3, gl.BYTE, 6],
+      [2, 1, gl.UNSIGNED_BYTE, 9],
+    ]) {
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, size, type, true, stride, offset);
+    }
   }
-  gl.vertexAttrib1f(2, 1);
+  upload(gl.ELEMENT_ARRAY_BUFFER, indices);
   const u = Object.fromEntries(
     ["state", "time", "yaw", "viewport", "sprite", "signal", "pass"].map((key) => [
       key,
@@ -174,7 +152,10 @@ function gpu(canvas) {
       gl.uniform1f(u.pass, 0);
       gl.disable(gl.BLEND);
       gl.bindVertexArray(surfaceVao);
+      // Invisible anatomical depth prevents far-side samples filling the eye sockets.
+      gl.colorMask(false, false, false, false);
       gl.drawElements(gl.TRIANGLES, indices.length / 2, gl.UNSIGNED_SHORT, 0);
+      gl.colorMask(true, true, true, true);
       gl.uniform1f(u.pass, 1);
       gl.depthMask(false);
       gl.enable(gl.BLEND);
@@ -191,6 +172,15 @@ function gpu(canvas) {
   };
 }
 function software(canvas) {
+  const view = new DataView(packed.buffer, packed.byteOffset, packed.byteLength);
+  const cloud = new Float32Array(sampleCount * 7);
+  for (let i = 0; i < sampleCount; i++) {
+    for (let k = 0; k < 3; k++) {
+      cloud[7 * i + k] = view.getInt16(i * stride + k * 2, true) / 22000;
+      cloud[7 * i + 3 + k] = view.getInt8(i * stride + 6 + k) / 127;
+    }
+    cloud[7 * i + 6] = packed[i * stride + 9] / 255;
+  }
   const ctx = canvas.getContext("2d");
   const palette = Array.from({ length: 128 }, (_, i) => {
     const b = (i % 32) / 31;
@@ -215,7 +205,7 @@ function software(canvas) {
         s = Math.sin(angle);
       const pulse = 1 + (state[2] - state[0]) * (0.012 + signal[0] * (0.13 + 0.04 * signal[1]));
       for (let i = 0; i < count; i++) {
-        const j = i * 8,
+        const j = i * 7,
           x = cloud[j],
           y = cloud[j + 1],
           z = cloud[j + 2],
@@ -224,20 +214,22 @@ function software(canvas) {
           nz = cloud[j + 5];
         const front = nz * c - nx * s;
         if (front < 0.08 || y < -0.95) continue;
-        const p = 3.8 / (3.8 - (z * c - x * s) * pulse);
-        const lum = Math.max(
-          0,
-          Math.min(
-            1,
-            (0.18 + 0.86 * Math.max(0, -nx * 0.6 + ny * 0.63 + nz * 0.48) + 0.3 * Math.max(0, nx)) *
-              cloud[j + 6],
-          ),
-        );
-        const mat = cloud[j + 7];
-        const color =
-          state[3] > 0.5 ? 3 : mat === 4 || nx > 0.55 ? 2 : mat === 5 || x < -0.05 ? 1 : 0;
-        ctx.fillStyle =
-          palette[color * 32 + Math.floor((mat === 3 ? lum * 0.16 : mat === 4 ? 0.98 : lum) * 31)];
+        const p = 3.8 / (3.8 - (z * c - x * s) * pulse - (1 - pulse));
+        const neck = Math.max(0, Math.min(1, (y + 0.98) / 0.35));
+        const lum =
+          neck *
+          Math.max(
+            0,
+            Math.min(
+              1,
+              (0.18 +
+                0.86 * Math.max(0, -nx * 0.6 + ny * 0.63 + nz * 0.48) +
+                0.3 * Math.max(0, nx)) *
+                cloud[j + 6],
+            ),
+          );
+        const color = state[3] > 0.5 ? 3 : nx > 0.55 ? 2 : nx < -0.18 ? 1 : 0;
+        ctx.fillStyle = palette[color * 32 + Math.floor(lum * 31)];
         const r = Math.max(1, h * 0.0044);
         ctx.fillRect(
           w / 2 + (x * c + z * s) * p * scale * pulse,
@@ -335,7 +327,7 @@ export function mountHead(original, readSignal) {
     backend.draw({
       count,
       t: pose,
-      yaw: -0.39 + (motion.matches ? 0 : 0.1 * Math.sin(pose * 0.48) + look * 0.2),
+      yaw: -0.23 + (motion.matches ? 0 : 0.1 * Math.sin(pose * 0.48) + look * 0.2),
       state,
       signal,
     });

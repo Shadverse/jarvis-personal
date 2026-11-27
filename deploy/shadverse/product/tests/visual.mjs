@@ -30,6 +30,20 @@ try {
       reducedMotion: "reduce",
     });
     const page = await context.newPage();
+    // Record the actual WebGL colour mask at every indexed surface draw.
+    await page.addInitScript(() => {
+      const proto = window.WebGL2RenderingContext?.prototype;
+      if (!proto) return;
+      const draw = proto.drawElements;
+      window.depthOnlyDraws = 0;
+      window.coloredSurfaces = 0;
+      proto.drawElements = function (...args) {
+        if (this.getParameter(this.COLOR_WRITEMASK).some(Boolean)) window.coloredSurfaces++;
+        else window.depthOnlyDraws++;
+        return draw.apply(this, args);
+      };
+    });
+
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto("http://localhost:3000/review");
@@ -113,11 +127,17 @@ try {
     }
     await nav("voice");
     await snap("voice", true);
+    assert.equal(await page.locator(".portrait").getAttribute("data-renderer"), "WebGL2");
+    const idlePixels = await page.locator(".portrait canvas").screenshot();
+    assert.ok(await page.evaluate(() => window.depthOnlyDraws > 0 && window.coloredSurfaces === 0));
     for (const state of ["listening", "thinking", "speaking", "error", "idle"]) {
       await page.click("[data-action=demo-" + state + "]");
       assert.equal(await page.locator(".voice-stage .portrait").getAttribute("data-state"), state);
       assert.equal(await page.locator(".modes [aria-pressed=true]").count(), 1);
       const portrait = page.locator(".portrait");
+      if (state !== "idle") {
+        assert.notDeepEqual(await portrait.locator("canvas").screenshot(), idlePixels, state);
+      }
       const still = await portrait.getAttribute("data-frames");
       await page.waitForTimeout(80);
       assert.equal(await portrait.getAttribute("data-frames"), still);
@@ -127,6 +147,16 @@ try {
     await page.click("[data-action=tab-gallery]");
     await page.locator("#search").fill("تصویر");
     await nav("monitor");
+    assert.equal(await page.locator(".portrait").count(), 0);
+    await page.waitForFunction(
+      () => document.querySelector("[data-stat=peak]").textContent !== "—",
+    );
+    await page.waitForFunction(() => {
+      const fullWindow = new Intl.NumberFormat("fa").format(80);
+      return document
+        .querySelector(".trace-detail")
+        .textContent.startsWith("نمونه‌ها · " + fullWindow);
+    });
     await snap("monitor", true);
     await page.locator("#scope button").click();
     assert.equal(await page.locator("#scope button").getAttribute("aria-pressed"), "true");

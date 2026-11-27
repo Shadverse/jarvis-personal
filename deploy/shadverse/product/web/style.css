@@ -1491,3 +1491,46 @@ html[dir="rtl"] [name="password"]:placeholder-shown {
 .signal-meter meter::-webkit-meter-optimum-value {
   background: linear-gradient(90deg, #aa73ff, #7deeff);
 }
+
+/* The trace sits in a recessed optical layer inside the management glass. */
+#scope {
+  background:
+    radial-gradient(ellipse at 93% 1%, #5448b745, transparent 51%),
+    linear-gradient(120deg, #172445ab, #0b1427ea 54%, #101d30c7);
+  border: 1px solid #8bb5e34d;
+  box-shadow:
+    inset 0 1px 0 #dbe8ff8a,
+    inset 0 -2px 2px #59c9ff2b,
+    0 9px 25px #03081988;
+}
+#scope canvas {
+  border-block: 1px solid #71cfff2a;
+  background:
+    repeating-linear-gradient(90deg, transparent 0 calc(12.5% - 1px), #8dcaff12 12.5%),
+    linear-gradient(180deg, #060b1e88, #152c4059);
+}
+.trace-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 12px 0 0;
+  padding-block: 6px;
+}
+.trace-stats div {
+  padding: 2px 6px;
+}
+.trace-stats div + div {
+  border-inline-start: 1px solid #8bb5e340;
+}
+.trace-stats dt {
+  font-size: 14px;
+  color: #d0c8e6;
+}
+.trace-stats dd {
+  margin: 4px 0 0;
+  color: #ceefff;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.trace-detail {
+  margin-bottom: 0;
+}
