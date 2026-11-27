@@ -10,7 +10,7 @@ body:has(.voice-shell)::before {
 
 .voice-shell {
   isolation: isolate;
-  padding-block: 9px;
+  padding-block: 7px;
 }
 
 .voice-matrix {
@@ -32,7 +32,7 @@ body:has(.voice-shell)::before {
   display: grid;
   grid-template-rows: auto minmax(220px, 1fr) auto auto;
   justify-items: center;
-  gap: 5px;
+  gap: 3px;
   width: min(100%, 1050px);
   min-width: 0;
   margin: 0 auto;
@@ -40,7 +40,7 @@ body:has(.voice-shell)::before {
 
 .voice-heading h1 {
   color: #eefaff;
-  font-size: clamp(27px, 4.9svh, 50px);
+  font-size: clamp(25px, 4.1svh, 44px);
   line-height: 1.16;
   text-align: center;
   font-weight: 780;
@@ -64,22 +64,6 @@ body:has(.voice-shell)::before {
   filter: drop-shadow(0 0 2px #74d5ff72) drop-shadow(0 0 10px #1769cc32);
 }
 
-.portrait-placeholder {
-  position: absolute;
-  inset: 0 0 28px;
-  display: grid;
-  place-items: center;
-  margin: 0;
-  color: #a1c4d8;
-  text-align: center;
-  pointer-events: none;
-}
-
-.portrait-placeholder[hidden],
-.voice-tools #contour-status:empty {
-  display: none;
-}
-
 .voice-tools {
   display: flex;
   align-items: start;
@@ -88,10 +72,6 @@ body:has(.voice-shell)::before {
   gap: 4px 16px;
   width: 100%;
   min-width: 0;
-}
-
-.voice-tools input[type="file"] {
-  max-width: min(250px, 75vw);
 }
 
 .voice-tools .modes {
@@ -145,7 +125,7 @@ body:has(.voice-shell)::before {
 .voice-shell .voice-dock {
   width: min(100%, 660px);
   border-radius: 20px;
-  padding: 7px 12px;
+  padding: 5px 12px;
   background: #05131ee0;
   border-color: #39678065;
   box-shadow: 0 12px 40px #0006;
@@ -202,7 +182,7 @@ body:has(.voice-shell)::before {
 }
 
 .voice-shell .voice-dock .audio-buttons .voice-main-control {
-  --mic-size: 48px;
+  --mic-size: 44px;
   position: relative;
   width: 119px;
   min-height: calc(var(--mic-size) + 23px);
@@ -292,10 +272,35 @@ body:has(.voice-shell)::before {
   cursor: pointer;
 }
 
+.voice-copy {
+  min-width: 0;
+}
+
 @media (min-width: 721px) {
   .voice-shell {
     height: 100svh;
     grid-template-rows: minmax(0, 1fr);
+  }
+
+  .voice-copy {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    column-gap: 8px;
+    min-height: 23px;
+  }
+
+  .voice-copy:has(#audio-status:empty) {
+    grid-template-columns: 1fr;
+  }
+
+  .voice-copy #audio-status:empty {
+    display: none;
+  }
+
+  .voice-copy .voice-note {
+    font-size: 13px;
+    margin: 0;
   }
 
   .voice-shell .main,

@@ -2,7 +2,6 @@ import lensMap from "./art/glass-normal.png";
 import { energyCore, voiceStates } from "./core.js";
 import { icon } from "./icons.js";
 import { Signal } from "./identity/audio.js";
-import { makeCloud, readContours } from "./identity/contours.js";
 import { mountHead } from "./identity/head.js";
 import { mountScope } from "./instruments.js";
 const app = document.querySelector("#app");
@@ -38,7 +37,6 @@ let workspaceEpoch = 0,
 let head = null,
   stopScope = null,
   lastPortrait = null,
-  creatorCloud,
   voiceEpoch = 0;
 let projects = [],
   activeProject = "",
@@ -58,7 +56,6 @@ function stopAudio() {
 }
 function clearWorkspace() {
   workspaceEpoch++;
-  creatorCloud = undefined;
   projects = [];
   activeProject = "";
   notes = [];
@@ -164,9 +161,6 @@ function voice() {
     <header class="voice-heading"><h1 id="voice-title">${label("voice")}</h1></header>
     <div class="voice-chamber">
       ${energyCore(demoState)}
-      <p class="portrait-placeholder" ${creatorCloud ? "hidden" : ""}>${review || session?.role === "creator"
-        ? t("برای نمایش چهره، فایل چهرهٔ خصوصی را انتخاب کنید.", "Load your private portrait to reveal the hologram.")
-        : t("چهرهٔ خصوصی در نشست سازنده در دسترس است.", "The private portrait is available in the Creator session.")}</p>
       <div class="voice-indicator"><i aria-hidden="true"></i><h2 id="state-title" aria-live="polite">${stateLabel(demoState)}</h2></div>
     </div>
     <div class="voice-dock glass">
@@ -183,19 +177,15 @@ function voice() {
           <label>${t("طیف صدا", "Spectrum")}<meter min="0" max="1" value="0"></meter></label>
         </div>
       </div>
-      <p class="voice-note">${t("گفت‌وگوی صوتی زنده هنوز متصل نیست.", "Live voice conversation is unavailable.")}</p>
-      <p class="notice" id="audio-status" role="status">${safe(micState)}</p>
+      <div class="voice-copy">
+        <p class="voice-note">${t("گفت‌وگوی صوتی زنده هنوز متصل نیست.", "Live voice conversation is unavailable.")}</p>
+        <p class="notice" id="audio-status" role="status">${safe(micState)}</p>
+      </div>
     </div>
     <div class="voice-tools">${review ? `<details class="voice-review-modes" open><summary>${t("آزمایش حالت‌های حرکت", "Test motion states")}</summary>
       <div class="modes" role="group" aria-label="${t("حالت‌های نمایشی", "Demonstration states")}">${Object.keys(voiceStates)
         .map((key) => `<button type="button" data-action="demo-${key}" aria-pressed="${key === demoState}">${stateLabel(key)}</button>`)
         .join("")}</div>
-    </details>` : ""}
-    ${review || session?.role === "creator" ? `<details class="voice-review-modes">
-      <summary>${t("چهرهٔ خصوصی", "Private portrait")}</summary>
-      <label for="creator-contours">${t("فایل خطوط چهره", "Portrait contours file")}</label>
-      <input id="creator-contours" type="file" accept=".json,application/json">
-      <p id="contour-status" role="status">${creatorCloud ? t("چهرهٔ خصوصی فعال است.", "Private portrait is active.") : ""}</p>
     </details>` : ""}
     <a class="voice-credits" href="./identity/VOICE-NOTICES.txt" target="_blank" rel="noopener">${t("منابع و مجوزها", "Sources and licenses")}</a></div>
   </section>`;
@@ -329,7 +319,7 @@ function render() {
 
   const canvas = app.querySelector(".portrait canvas");
   if (canvas) {
-    head = mountHead(canvas, () => signal.read(), () => signal.mode !== "off", creatorCloud);
+    head = mountHead(canvas, () => signal.read(), () => signal.mode !== "off");
     head.setState(page === "voice" ? demoState : "idle");
   }
   const scope = app.querySelector("#scope");
@@ -642,28 +632,6 @@ app.addEventListener("input", (event) => {
   }
 });
 app.addEventListener("change", async (event) => {
-  if (event.target.id === "creator-contours") {
-    const file = event.target.files[0];
-    if (!file) return;
-    const portrait = head;
-    const status = app.querySelector("#contour-status");
-    try {
-      if (file.size > 100_000) throw Error("Contour file too large");
-      const strokes = readContours(await file.text());
-      if (portrait !== head || event.target.files[0] !== file) return;
-      const cloud = makeCloud(strokes);
-      portrait.setCloud(cloud);
-      creatorCloud = cloud;
-      app.querySelector(".portrait-placeholder").hidden = true;
-      status.textContent = t("چهرهٔ خصوصی فعال است.", "Private portrait is active.");
-    } catch {
-      if (event.target.files[0] === file)
-        status.textContent = t("خواندن فایل خطوط چهره ممکن نشد.", "Could not read the portrait contours file.");
-    } finally {
-      if (event.target.files[0] === file) event.target.value = "";
-    }
-    return;
-  }
   if (event.target.id === "project-filter") {
     activeProject = event.target.value;
     render();

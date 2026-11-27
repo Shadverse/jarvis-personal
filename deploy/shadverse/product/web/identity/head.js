@@ -1,4 +1,4 @@
-import { eyeHaloCount, particleStride } from "./contours.js";
+import { eyeHaloCount, hologramCloud, particleStride } from "./hologram.js";
 import { matrixField } from "./matrix.js";
 
 /*! Audio envelope adapted from Pipecat UI. Copyright (c) 2024–2026 Daily. BSD-2-Clause, see VOICE-NOTICES.txt. */
@@ -25,13 +25,16 @@ void main(){
   float front = smoothstep(-.12,.46,p.z);
   float ripple = sin(flow.z - p.y * 8.6 - p.z * 4.4 + p.x * 1.5);
   float offset = flow.y * (.67 + .33 * ripple * motion) - flow.x;
-  p.xy *= 1. + offset * .42;
+  p.xy *= 1. + offset * .32;
   p.z += offset * .92 + flow.y * ripple * motion * .055;
   float pulse = sin(time * 3.1 - particle.y * 14. - abs(particle.x) * 17.);
   if (filament) {
-    float shear = motion * (.017 + flow.y * .14) * pulse;
-    p.xy += vec2(p.x, .65 + p.y * .2) * shear;
-    p.z += shear * .6;
+    float cycle = time * (1.14 + .40 * seed) - length(p.xy) * 6. + phase;
+    float travel = motion * (.082 + .071 * seed + flow.y * .21) * sin(cycle);
+    vec2 radial = normalize(vec2(p.x + .001, p.y - .09));
+    vec2 tangent = vec2(-radial.y, radial.x);
+    p.xy += radial * travel + tangent * sin(cycle * .81 + phase) * motion * .041;
+    p.z += travel * .57 + motion * .029 * pulse;
   }
   float orbit = state.y * motion * (.050 - .035 * hold) * sin(time * 1.25 + p.z * 8.5 + p.y * 3.);
   p.xy += vec2(-p.y, p.x) * orbit;
@@ -43,12 +46,12 @@ void main(){
   float z = p.z * c - p.x * s;
   float perspective = 4.1 / (4.1 - z);
   float scale = min(viewport.y, viewport.x * 1.52);
-  gl_Position = vec4(vec2((p.x * c + p.z * s) * 1.13, p.y - .09) * (.887 * perspective * scale / viewport), 0., 1.);
+  gl_Position = vec4(vec2((p.x * c + p.z * s) * 1.2, p.y - .055) * (.966 * perspective * scale / viewport), 0., 1.);
   float flash = smoothstep(.935, 1., seed) * smoothstep(.47,.96,particle.w);
-  float sprite = scale * (.0023 + .0019 * particle.w + flash * .009) * (.62 + seed * .76);
+  float sprite = scale * (.0034 + .0025 * particle.w + flash * .011) * (.62 + seed * .76);
   if (kind == 1.) sprite *= 1.18;
   if (filament) sprite *= 2.18;
-  gl_PointSize = halo ? clamp(scale * .134 * perspective, 12., 104.) : clamp(sprite * perspective, 1.05, 8.3);
+  gl_PointSize = halo ? clamp(scale * .157 * perspective, 14., 110.) : clamp(sprite * perspective, 1.05, 8.3);
   wave = (flow.y * 2.2 + state.y * .11) * (.5 + .5 * ripple) * motion;
   float flicker = filament ? .22 * pulse : .10 * sin(time * (1. + seed) + phase);
   light = particle.w * (.72 + .27 * seed + .10 * front + wave + state.y * .08 + motion * flicker);
@@ -65,9 +68,9 @@ void main(){
   vec2 uv = gl_PointCoord * 2. - 1.;
   float d = dot(uv, uv);
   if (d > 1.) discard;
-  float alpha = min(.94, light * (1.46 * exp(-d * 5.6) + .22 * exp(-d * 2.7)));
-  vec3 ice = mix(vec3(.15,.63,1.), vec3(.88,.98,1.),
-    clamp(light * .86 + seed * seed * .37 + wave, 0., 1.));
+  float alpha = min(.94, light * (1.72 * exp(-d * 4.8) + .35 * exp(-d * 2.45)));
+  vec3 ice = mix(vec3(.17,.62,1.), vec3(.93,.99,1.),
+    clamp(light * 1.14 + seed * seed * .35 + wave, 0., 1.));
   if (kind == 3.) {
     vec2 axes = abs(mat2(.986,-.166,.166,.986) * uv);
     float rays = exp(-axes.y * 69. - axes.x * 6.3) * .25
@@ -79,7 +82,7 @@ void main(){
     float along = dot(uv, trailAxis);
     float across = dot(uv, vec2(-trailAxis.y, trailAxis.x));
     float spark = exp(-along * along * 3.9 - across * across * 53.);
-    alpha = min(.90, light * (.71 * spark + .21 * exp(-d * 3.)));
+    alpha = min(.90, light * (1.02 * spark + .28 * exp(-d * 3.)));
     ice = mix(vec3(.17,.66,1.), vec3(.89,.98,1.), clamp(light + .15,0.,1.));
   } else if (kind < .5 && seed > .955) {
     vec2 axes = abs(uv);
@@ -203,24 +206,25 @@ function software(canvas) {
         const spin =
           motion * thinking * 0.04 * Math.sin(t * 1.25 + cloud[j + 2] * 8.5 + cloud[j + 1] * 3);
         const drift = kind === 3 ? 0 : motion * 0.006 * (1 - brightness);
+        const distance = Math.hypot(cloud[j], cloud[j + 1]);
+        const cycle = t * (1.14 + 0.4 * seed) - distance * 6 + phase;
         const current =
           kind === 2
-            ? motion *
-              (0.017 + push * 0.14) *
-              Math.sin(t * 3.1 - cloud[j + 1] * 14 - Math.abs(cloud[j]) * 17)
+            ? (motion * (0.082 + 0.071 * seed + push * 0.21) * Math.sin(cycle)) /
+              Math.max(0.14, distance)
             : 0;
         const x =
-          cloud[j] * (1 + offset * 0.42 + current) -
+          cloud[j] * (1 + offset * 0.32 + current) -
           spin * cloud[j + 1] +
           drift * Math.sin(t * (1.2 + seed) + phase);
         const y =
-          cloud[j + 1] * (1 + offset * 0.42 + current * 0.6) +
+          cloud[j + 1] * (1 + offset * 0.32 + current * 0.6) +
           spin * cloud[j] +
           drift * Math.cos(t * (1.5 + seed) + phase);
         const z = cloud[j + 2] + offset * 0.92 + motion * push * ripple * 0.055;
         const perspective = 4.1 / (4.1 - z * c + x * s);
-        const px = width / 2 + (x * c + z * s) * 0.501155 * scale * perspective;
-        const py = height / 2 - (y - 0.09) * 0.4435 * scale * perspective;
+        const px = width / 2 + (x * c + z * s) * 0.5796 * scale * perspective;
+        const py = height / 2 - (y - 0.055) * 0.483 * scale * perspective;
         if (kind === 3) {
           const radius = scale * 0.076;
           const light = ctx.createRadialGradient(px, py, 0, px, py, radius);
@@ -236,7 +240,7 @@ function software(canvas) {
         }
         const tint = brightness > 0.66 || kind === 1 ? "#e1faff" : base;
         if (style !== tint) ctx.fillStyle = style = tint;
-        const size = Math.max(1, scale * (0.0015 + 0.002 * brightness) * (0.65 + seed * 0.65));
+        const size = Math.max(1, scale * (0.00205 + 0.0024 * brightness) * (0.65 + seed * 0.65));
         ctx.globalAlpha = Math.min(0.93, brightness * (0.88 + seed * 0.31 + push * 0.7));
         ctx.fillRect(px - size / 2, py - size / 2, size, size);
       }
@@ -251,12 +255,8 @@ const targets = {
   speaking: [0, 0, 1, 0],
   error: [0, 0, 0, 1],
 };
-export function mountHead(
-  original,
-  readSignal,
-  hasAudio = () => false,
-  cloud = new Float32Array(0),
-) {
+export function mountHead(original, readSignal, hasAudio = () => false) {
+  const cloud = hologramCloud();
   let canvas = original,
     backend;
   // Old contexts may be lost by the OS, even on devices with WebGL2.
@@ -402,11 +402,6 @@ export function mountHead(
   document.addEventListener("visibilitychange", visibility);
   motion.addEventListener("change", visibility);
   return {
-    setCloud(points) {
-      cloud = points;
-      backend.setCloud(cloud);
-      schedule(true);
-    },
     setState(key) {
       target = targets[key] || targets.idle;
       converging = true;

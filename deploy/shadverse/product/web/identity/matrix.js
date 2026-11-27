@@ -7,7 +7,7 @@ export function matrixField(canvas) {
     height = 0,
     previous = -1;
   for (let layer = 0; layer < 3; layer++) {
-    for (let i = 0; i < [43, 29, 14][layer]; i++) {
+    for (let i = 0; i < [49, 35, 18][layer]; i++) {
       const index = streams.length;
       const seed = (index * 0.618034 + 0.053) % 1;
       streams.push({
@@ -36,15 +36,21 @@ export function matrixField(canvas) {
         const unit = 11 + layer * 5;
         const y = (time * speed + seed * height * 1.7) % (height + length * unit);
         const position = x * width;
-        const edge = 0.28 + 0.72 * Math.min(1, Math.abs(x - 0.53) * 2.55);
+        const edge = 0.4 + 0.6 * Math.min(1, Math.abs(x - 0.53) * 2.55);
         ctx.font = unit + "px monospace";
-        ctx.fillStyle = layer === 2 ? "#38bfdc" : "#367b9e";
+        ctx.fillStyle = layer === 2 ? "#4adef7" : "#3299bf";
         for (let j = 0; j < length; j++) {
           const yy = y - j * unit;
           if (yy < 0 || yy > height) continue;
           const index = Math.floor(seed * 193 + j * 11 + yy / unit + time * 0.42) % glyphs.length;
-          ctx.globalAlpha = edge * (1 - j / length) ** 1.45 * (0.075 + layer * 0.034);
+          ctx.globalAlpha = edge * (1 - j / length) ** 1.45 * (0.145 + layer * 0.066);
           ctx.fillText(glyphs[index], position, yy);
+          if (j === 0 && layer === 2) {
+            ctx.fillStyle = "#a8f3ff";
+            ctx.globalAlpha = edge * 0.3;
+            ctx.fillText(glyphs[index], position, yy);
+            ctx.fillStyle = "#4adef7";
+          }
         }
       }
       ctx.fillStyle = "#74d9ff";
