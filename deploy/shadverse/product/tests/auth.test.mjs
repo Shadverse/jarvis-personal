@@ -14,7 +14,6 @@ import { addUser, openStore, invite } from "../auth.mjs";
 test("Persian Gate with isolated accounts", { timeout: 60000 }, async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "jarvis-gate-test-"));
   const db = openStore(dir);
-  const marker = "https://creator.example.invalid/";
   const reserve = createServer().listen(0, "127.0.0.1");
   await once(reserve, "listening");
   const port = reserve.address().port;
@@ -25,7 +24,6 @@ test("Persian Gate with isolated accounts", { timeout: 60000 }, async (t) => {
     PORT: String(port),
     JARVIS_STATE: dir,
     JARVIS_ORIGIN: origin,
-    JARVIS_CREATOR_UI: marker,
   };
   const cwd = fileURLToPath(new URL("../", import.meta.url));
   const server = spawn(process.execPath, ["server.mjs"], {
@@ -88,23 +86,27 @@ test("Persian Gate with isolated accounts", { timeout: 60000 }, async (t) => {
     assert.notEqual(rows[0].hash, rows[1].hash);
     assert.notEqual(rows[0].salt, rows[1].salt);
   });
-  await t.test("Creator handoff and real directory require the correct server role", async () => {
-    const member = await auth("guest"),
-      creator = await auth("creator");
-    assert.equal(member.body.controlUI, undefined);
-    assert.equal(creator.body.controlUI, marker);
-    assert.equal((await get("admin")).status, 401);
-    assert.equal((await get("admin", member.cookie)).status, 403);
-    const result = await get("admin", creator.cookie);
-    assert.deepEqual(
-      (await result.json()).users.map((u) => u.name),
-      ["creator", "guest"],
-    );
-    const session = await get("session", member.cookie);
-    assert.equal(session.headers.get("cache-control"), "no-store");
-    assert.equal((await session.json()).name, "guest");
-    assert.ok(!db.prepare("SELECT id FROM sessions WHERE id=?").get(member.cookie.split("=")[1]));
-  });
+  await t.test(
+    "Only Creator can read the account directory and session metadata has no Gateway link",
+    async () => {
+      const member = await auth("guest"),
+        creator = await auth("creator");
+      assert.equal(member.body.controlUI, undefined);
+      assert.equal(creator.body.controlUI, undefined);
+      assert.equal(creator.body.chatAvailable, false);
+      assert.equal((await get("admin")).status, 401);
+      assert.equal((await get("admin", member.cookie)).status, 403);
+      const result = await get("admin", creator.cookie);
+      assert.deepEqual(
+        (await result.json()).users.map((u) => u.name),
+        ["creator", "guest"],
+      );
+      const session = await get("session", member.cookie);
+      assert.equal(session.headers.get("cache-control"), "no-store");
+      assert.equal((await session.json()).name, "guest");
+      assert.ok(!db.prepare("SELECT id FROM sessions WHERE id=?").get(member.cookie.split("=")[1]));
+    },
+  );
   await t.test("Origin and CSRF checks protect sign-in and logout", async () => {
     const who = await auth("creator");
     assert.equal(
@@ -145,7 +147,7 @@ test("Persian Gate with isolated accounts", { timeout: 60000 }, async (t) => {
       await page.locator("[name=password]").fill(password);
       await page.locator("[type=submit]").click();
       await page.locator("#draft").waitFor();
-      assert.equal(await page.locator('a[href="' + marker + '"]').count(), 1);
+      assert.equal(await page.locator(".send").isDisabled(), true);
       await page.reload();
       await page.locator("#draft").waitFor();
       await page.locator("nav [data-action=admin]").click();
