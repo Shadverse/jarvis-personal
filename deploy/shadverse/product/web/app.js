@@ -28,6 +28,10 @@ const safe = (value) =>
     /[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
   );
+const canPreview = standalone || ["localhost", "127.0.0.1"].includes(location.hostname);
+let turns = [],
+  sending = false,
+  chatFeedback = "";
 let workspaceEpoch = 0,
   meterTimer = 0;
 let head = null,
@@ -57,6 +61,9 @@ function clearWorkspace() {
   notes = [];
   savedDrafts = [];
   resources = [];
+  turns = [];
+  sending = false;
+  chatFeedback = "";
   query = "";
 }
 const names = () => ({
@@ -88,8 +95,9 @@ const glyph = {
 };
 const label = (k) => names()[k];
 const productName = () => t("جارویس شادوِرس", "SHADVERSE JARVIS");
+const emblem = () => '<div class="emblem"><img src="./icon-192.png" alt=""></div>';
 const brand = () =>
-  '<div class="brand"><img src="./icon-192.png" alt=""><div>SHADVERSE <b>JARVIS</b></div></div>';
+  `<div class="brand"><img src="./icon-192.png" alt=""><strong>${productName()}</strong></div>`;
 const language = () =>
   `<button class="outline lang" data-action="lang">${icon("globe")}${t("EN", "فارسی")}</button>`;
 const button = (action, body, cls = "outline") =>
@@ -97,10 +105,7 @@ const button = (action, body, cls = "outline") =>
 const notice = () => `<p class="notice" role="status">${safe(feedback)}</p>`;
 const previewLabel = () => t("پیش‌نمایش", "Preview");
 const offline = () =>
-  t(
-    "اتصال به دستیار در این پیش‌نمایش غیرفعال است.",
-    "Assistant connection is disabled in this preview.",
-  );
+  t("گفت‌وگو برای این نشست در دسترس نیست.", "Chat is unavailable for this session.");
 const attribution = () =>
   `<a href="./OpenClaw-LICENSE.txt" target="_blank" rel="noopener">OpenClaw · MIT</a>`;
 function gate() {
@@ -108,17 +113,18 @@ function gate() {
     ? t("فعال‌سازی حساب", "Activate account")
     : t("به جارویس شادوِرس خوش آمدید", "Welcome to SHADVERSE JARVIS");
   const field = (id, text, type, ico, ac, placeholder) =>
-    `<label>${text}<span class="field">${icon(ico)}<input name="${id}" type="${type}" autocomplete="${ac}" required dir="${id === "code" ? "ltr" : "auto"}" placeholder="${placeholder}" ${id === "name" ? 'minlength="3" maxlength="48" pattern="[A-Za-z0-9_.\\-]+"' : 'minlength="12" maxlength="256"'}>${id === "password" ? button("reveal", icon("eye"), "eye") : ""}</span></label>`;
+    `<label>${text}<span class="field">${icon(ico)}<input name="${id}" type="${type}" autocomplete="${ac}" required dir="${id === "code" ? "ltr" : id === "name" ? "auto" : lang === "fa" ? "rtl" : "ltr"}" placeholder="${placeholder}" ${id === "name" ? 'minlength="3" maxlength="48" pattern="[A-Za-z0-9_.\\-]+" autocapitalize="none" spellcheck="false"' : id === "code" ? 'minlength="43" maxlength="43" autocapitalize="none" spellcheck="false"' : 'minlength="12" maxlength="256"'}>${id === "password" ? button("reveal", icon("eye"), "eye") : ""}</span></label>`;
   return `<main class="gate"><header class="bar">${language()}</header><div class="gatebody">
- <section class="gateform glass" dir="${lang === "fa" ? "rtl" : "ltr"}"><div class="identity"><div class="emblem"><img src="./icon-192.png" alt=""></div><strong>${productName()}</strong></div><h1>${heading}</h1><p class="sub">${activation ? t("حساب خود را با کد ثبت‌نام فعال کنید.", "Activate your account with a registration code.") : t("وارد فضای شخصی خود شوید.", "Sign in to your private workspace.")}</p>
- <form id="auth">${field("name", t("نام کاربری", "Username"), "text", "user", "username", "jarvis.user")}${field("password", t("گذرواژه", "Password"), reveal ? "text" : "password", "lock", activation ? "new-password" : "current-password", "••••••••••••")}${activation ? field("code", t("کد ثبت‌نام", "Registration code"), "text", "key", "off", "•••• ••••") : ""}
+ <section class="gateform glass" dir="${lang === "fa" ? "rtl" : "ltr"}"><div class="identity">${emblem()}<strong>${productName()}</strong></div><h1>${heading}</h1><p class="sub">${activation ? t("حساب خود را با کد ثبت‌نام فعال کنید.", "Activate your account with a registration code.") : t("وارد فضای شخصی خود شوید.", "Sign in to your private workspace.")}</p>
+ <form id="auth">${field("name", t("نام کاربری", "Username"), "text", "user", "username", "jarvis.user")}${field("password", t("رمز عبور", "Password"), reveal ? "text" : "password", "lock", activation ? "new-password" : "current-password", "••••••••••••")}${activation ? field("code", t("کد ثبت‌نام", "Registration code"), "text", "key", "off", "•••• ••••") : ""}
  ${notice()}<button class="primary" type="submit">${activation ? t("فعال‌سازی", "Activate") : t("ورود به جارویس شادوِرس", "Sign in to SHADVERSE JARVIS")}</button></form>
  <div class="gateactions">${button("activation", activation ? t("بازگشت به ورود", "Back to sign in") : t("فعال‌سازی با کد ثبت‌نام", "Activate with a registration code"), "textbtn")}</div>
- ${button("review", t("مشاهدهٔ پیش‌نمایش", "Explore visual preview"), "reviewbtn")}</section></div>
+ ${canPreview ? button("review", t("مشاهدهٔ پیش‌نمایش", "Explore visual preview"), "reviewbtn") : ""}</section></div>
  <footer class="foot"><span class="en">SHADVERSE ©</span>${attribution()}</footer></main>`;
 }
 function nav(k) {
-  return button(k, icon(glyph[k]) + label(k), `navbtn ${k === page ? "selected" : ""}`);
+  const selected = k === page;
+  return `<button type="button" class="navbtn${selected ? " selected" : ""}" data-action="${k}"${selected ? ' aria-current="page"' : ""}>${icon(glyph[k])}${label(k)}</button>`;
 }
 const starters = () => ({
   summarize: [
@@ -131,16 +137,19 @@ const starters = () => ({
   ],
 });
 function home() {
-  return `<div class="studio"><section class="greeting"><div class="identity-field">${energyCore()}</div><h1>${t("از کجا شروع کنیم؟", "Where shall we begin?")}</h1><div class="starters">${Object.entries(
+  const connected = !review && session?.chatAvailable;
+  return `<div class="studio"><section class="greeting">${emblem()}<h1>${t("از کجا شروع کنیم؟", "Where shall we begin?")}</h1><div class="starters">${Object.entries(
     starters(),
   )
     .map(([key, [caption]]) => button("prompt-" + key, caption, "starter"))
     .join("")}</div></section>
  <section class="composearea" aria-label="${t("گفت‌وگو", "Conversation")}">
- ${session?.controlUI && !review ? `<p><a class="outline" href="${safe(session.controlUI)}" target="_blank" rel="noreferrer">${t("باز کردن دستیار متصل", "Open paired assistant")}</a></p>` : ""}<div class="composer glass"><textarea id="draft" dir="auto" aria-label="${t("پیام", "Message")}" placeholder="${t("برای جارویس شادوِرس بنویسید…", "Write your message…")}">${safe(draft)}</textarea>
+ ${turns.length ? `<ol class="thread" aria-label="${t("پیام‌های گفت‌وگو", "Conversation messages")}">${turns.map(({ speaker, text }) => `<li class="turn ${speaker}"><strong>${speaker === "assistant" ? productName() : t("شما", "You")}</strong><p>${safe(text)}</p></li>`).join("")}</ol>` : ""}
+ <form id="conversation" class="composer glass"><textarea id="draft" maxlength="4000" aria-label="${t("پیام", "Message")}" placeholder="${t("برای جارویس شادوِرس بنویسید…", "Write your message…")}">${safe(draft)}</textarea>
  <div id="attachments">${files.map((f, i) => `<span class="chip"><bdi>${safe(f.name)}</bdi>${button("remove-" + i, icon("close"), "remove")}</span>`).join("")}</div>
- <div class="draft-actions">${button("save-draft", icon("layers") + t("ذخیرهٔ پیش‌نویس", "Save draft"), "textbtn")}</div><div class="tools">${button("attach", icon("attach"), "iconbtn")}<input type="file" multiple id="file" hidden><select aria-label="${t("انتخاب مدل", "Model selection")}" disabled><option>${t("مدل پیش‌فرض", "Default model")}</option></select>
- ${button("voice", icon("wave") + label("voice"), "voicebtn")}<button class="primary send" disabled aria-label="${t("ارسال", "Send")}" title="${offline()}">${icon("send")}</button></div></div><p class="status"><i></i>${offline()}</p></section>
+ <div class="tools">${button("attach", icon("attach"), "iconbtn")}<input type="file" multiple id="file" hidden>${button("save-draft", icon("layers") + t("ذخیرهٔ پیش‌نویس", "Save draft"), "textbtn")}
+ ${button("voice", icon("wave") + label("voice"), "voicebtn")}<button type="submit" class="primary send" ${connected && !sending ? "" : "disabled"} aria-label="${t("ارسال", "Send")}">${icon("send")}</button></div></form>
+ <p class="status" role="status" aria-live="polite">${sending ? t("جارویس در حال آماده‌کردن پاسخ است…", "JARVIS is preparing a reply…") : safe(chatFeedback || (connected ? "" : offline()))}</p></section>
  <section class="library"><h2>${label("workspace")}</h2><div class="shortcuts glass">${["history", "projects", "memory", "files", "gallery"].map((k) => button("tab-" + k, icon(glyph[k]) + "<span>" + label(k) + "</span>", "shortcut")).join("")}</div></section></div>`;
 }
 function title(k) {
@@ -150,17 +159,21 @@ function voice() {
   const stateLabel = (k) => t(...voiceStates[k]);
 
   return `<section class="voice-stage" data-state="${demoState}"><h1>${label("voice")}</h1>
-  <p class="sub">${t("این حالت‌ها نمایشی‌اند. گفت‌وگوی زنده متصل نیست.", "Portrait and audio preview. Live conversation is disconnected.")}</p>
-  <div class="identity-field">${energyCore(demoState)}</div>
+  <p class="sub">${review ? t("پیش‌نمایش حرکت پوستهٔ ذره‌ای و واکنش به صدا", "Particle motion and audio response preview") : t("میکروفون و پخش نمونه را اینجا آزمایش کنید. گفت‌وگوی صوتی زنده هنوز در دسترس نیست.", "Test microphone and sample playback here. Live voice conversation is unavailable.")}</p>
+  ${review ? `<div class="identity-field">${energyCore(demoState)}</div>` : `<div class="voice-signal glass">${icon("wave")}</div>`}
   <h2 id="state-title" aria-live="polite">${stateLabel(demoState)}</h2>
-  <div class="modes glass" role="group" aria-label="${t("حالت‌های نمایشی", "Demonstration states")}">${Object.keys(
-    voiceStates,
-  )
-    .map(
-      (k) =>
-        `<button type="button" data-action="demo-${k}" aria-pressed="${k === demoState}">${stateLabel(k)}</button>`,
-    )
-    .join("")}</div>
+  ${
+    review
+      ? `<div class="modes glass" role="group" aria-label="${t("حالت‌های نمایشی", "Demonstration states")}">${Object.keys(
+          voiceStates,
+        )
+          .map(
+            (k) =>
+              `<button type="button" data-action="demo-${k}" aria-pressed="${k === demoState}">${stateLabel(k)}</button>`,
+          )
+          .join("")}</div>`
+      : ""
+  }
   <div class="signal-meter" hidden><label>${t("دامنهٔ صدا", "Level")}<meter min="0" max="1" value="0"></meter></label><label>${t("مرکز طیفی نسبی", "Relative spectral centroid")}<meter min="0" max="1" value="0"></meter></label></div><div class="audio-buttons">${button("mic", icon("mic") + t("آزمایش میکروفون", "Test microphone"), "mic-check")}${button("sample", icon("wave") + t("پخش نمونهٔ انگلیسی", "Play voice sample"), "mic-check")}</div>
   <p class="notice" id="audio-status" role="status">${safe(micState)}</p></section>`;
 }
@@ -178,7 +191,8 @@ function syncVoice() {
     }, 100);
   }
   stage.dataset.state = demoState;
-  stage.querySelector(".portrait").dataset.state = demoState;
+  const portrait = stage.querySelector(".portrait");
+  if (portrait) portrait.dataset.state = demoState;
   head?.setState(demoState);
   stage.querySelector("#state-title").textContent = t(...voiceStates[demoState]);
   for (const b of stage.querySelectorAll(".modes button"))
@@ -269,7 +283,7 @@ function shell() {
  <nav class="navgroup"><small>${t("محیط شخصی", "Personal space")}</small>${["main", "voice", "workspace", "monitor"].map(nav).join("")}</nav>
  <nav class="navgroup"><small>${t("حساب کاربری", "Account")}</small>${nav("plans")}${creator ? nav("admin") : ""}</nav>
  <div class="railbottom"><span class="pill">${icon("user")}${review ? previewLabel() : `<bdi>${safe(session.name)}</bdi>`}</span>${button("logout", icon("logout") + t("خروج", "Sign out"), "navbtn")}</div></aside>
- <main class="main"><header class="top"><div class="topstart">${button("menu", icon("menu"), "iconbtn mobilemenu")}</div><strong class="topname">${productName()}</strong><div class="topactions"><span class="pill"><i class="dot"></i>${previewLabel()}</span>${language()}</div></header>
+ <main class="main"><header class="top"><div class="topstart">${button("menu", icon("menu"), "iconbtn mobilemenu")}</div><strong class="topname">${productName()}</strong><div class="topactions">${review ? `<span class="pill">${previewLabel()}</span>` : ""}${language()}</div></header>
  <div class="page">${{ main: home, voice, workspace: space, monitor, plans, admin }[page]()}${notice()}</div>
  <footer class="footnote"><span class="en">SHADVERSE ©</span>${attribution()}</footer></main></div>`;
 }
@@ -297,7 +311,7 @@ function render() {
   if (page === "voice") syncVoice();
   for (const [action, fa, en] of [
     ["attach", "افزودن پیوست", "Attach files"],
-    ["reveal", "نمایش یا پنهان کردن گذرواژه", "Show or hide password"],
+    ["reveal", "نمایش یا پنهان کردن رمز عبور", "Show or hide password"],
     ["menu", "منوی پیمایش", "Navigation menu"],
   ]) {
     app
@@ -322,15 +336,25 @@ async function api(path, body) {
 }
 function errorText(code) {
   const errors = {
-    credentials: t("نام کاربری یا گذرواژه درست نیست.", "Incorrect username or password."),
+    credentials: t("نام کاربری یا رمز عبور درست نیست.", "Incorrect username or password."),
     invalid: t(
-      "نام کاربری باید ۳ تا ۴۸ نویسهٔ لاتین و گذرواژه دست‌کم ۱۲ نویسه باشد.",
+      "نام کاربری باید ۳ تا ۴۸ نویسهٔ لاتین و رمز عبور دست‌کم ۱۲ نویسه باشد.",
       "Use a 3–48 character username and a password of at least 12 characters.",
     ),
     activation: t(
       "فعال‌سازی انجام نشد. کد و نام کاربری را بررسی کنید.",
       "Activation failed. Check the code and username.",
     ),
+    gateway: t(
+      "دریافت پاسخ از جارویس ممکن نشد. دوباره تلاش کنید.",
+      "JARVIS could not respond. Try again.",
+    ),
+    busy: t(
+      "جارویس هنوز در حال آماده‌کردن پاسخ قبلی است.",
+      "JARVIS is still preparing the previous reply.",
+    ),
+    auth: t("نشست پایان یافته است. دوباره وارد شوید.", "Your session has ended. Sign in again."),
+    archived: t("گفت‌وگوی فعلی بایگانی شده است.", "The current conversation is archived."),
     limit: t(
       "تلاش‌های زیادی انجام شده است. ده دقیقهٔ دیگر دوباره تلاش کنید.",
       "Too many attempts. Try again in ten minutes.",
@@ -344,6 +368,58 @@ function errorText(code) {
 app.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
+  if (form.id === "conversation") {
+    if (!session?.chatAvailable || sending) return;
+    const message = draft.trim();
+    if (!message || files.length) {
+      chatFeedback = files.length
+        ? t(
+            "ارسال پیوست فعال نیست. برای ارسال متن، پیوست‌ها را بردارید.",
+            "Attachments are unavailable. Remove them to send text.",
+          )
+        : t("ابتدا متن پیام را بنویسید.", "Write a message first.");
+      form.parentElement.querySelector(".status").textContent = chatFeedback;
+      return;
+    }
+    const requester = session;
+    sending = true;
+    chatFeedback = "";
+    form.setAttribute("aria-busy", "true");
+    form.querySelector(".send").disabled = true;
+    form.parentElement.querySelector(".status").textContent = t(
+      "جارویس در حال آماده‌کردن پاسخ است…",
+      "JARVIS is preparing a reply…",
+    );
+    try {
+      const { reply } = await api("chat", { message });
+      if (session !== requester) return;
+      turns.push({ speaker: "human", text: message }, { speaker: "assistant", text: reply });
+      if (draft.trim() === message) draft = "";
+    } catch (err) {
+      if (session !== requester) return;
+      if (err.message === "auth") {
+        stopAudio();
+        clearWorkspace();
+        session = null;
+        page = "login";
+        draft = "";
+        files = [];
+        drawer = false;
+        feedback = errorText(err.message);
+        render();
+        return;
+      }
+      chatFeedback = errorText(err.message);
+    }
+    if (session !== requester) return;
+    sending = false;
+    if (page === "main") {
+      render();
+      app.querySelector(".thread .turn:last-child")?.scrollIntoView({ block: "nearest" });
+    }
+    return;
+  }
+  if (form.id !== "auth") return;
   if (standalone) {
     feedback = t("برای ورود، پیش‌نمایش سرور را باز کنید.", "Open the server preview to sign in.");
     render();
@@ -441,9 +517,9 @@ app.addEventListener("click", async (event) => {
     activation = !activation;
     reveal = false;
   } else if (action === "lang") lang = lang === "fa" ? "en" : "fa";
-  else if (action === "review") {
+  else if (action === "review" && canPreview) {
     review = true;
-    page = "main";
+    page = location.hash === "#voice" ? "voice" : "main";
   } else if (action === "menu") drawer = !drawer;
   else if (action === "logout") {
     try {
@@ -488,8 +564,8 @@ app.addEventListener("click", async (event) => {
                 "Live microphone input, processed in this browser",
               )
             : t(
-                "پخش نمونهٔ ازپیش‌ساخته؛ حرکت هماهنگ با صدا",
-                "Prerecorded demonstration, motion driven by playback",
+                review ? "پخش نمونهٔ ضبط‌شده؛ حرکت هماهنگ با صدا" : "پخش نمونهٔ ضبط‌شده",
+                review ? "Prerecorded sample, motion driven by playback" : "Prerecorded sample",
               );
       }
     } catch {
@@ -590,6 +666,10 @@ function showSession(user) {
   session = user;
   page = "main";
   render();
+}
+if (standalone && location.hash === "#voice") {
+  review = true;
+  page = "voice";
 }
 if (!standalone && location.pathname !== "/review")
   api("session")

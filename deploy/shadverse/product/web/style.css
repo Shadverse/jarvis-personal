@@ -12,18 +12,21 @@
 }
 :root {
   color-scheme: dark;
-  --optics: url("./art/lamina.webp");
   --ink: #f6f3fe;
   --muted: #c0bace;
   --violet: #ddc8ff;
   --line: #e5deff28;
-  --rim: inset 0 1px 0 #fff3, inset 1px 0 1px #d8c6ff17, 0 16px 48px #02010855;
+  --rim: inset 0 1px #f5deff4d, inset 0 -1px #91bbf033, 0 20px 55px #0802156b;
+  --optics:
+    radial-gradient(ellipse at 32% 18%, #6739a4 0, transparent 41%),
+    radial-gradient(ellipse at 74% 68%, #234365 0, transparent 34%),
+    linear-gradient(149deg, #190c31, #120d25 58%, #170d29);
   font:
     400 16px/1.7 Vazir,
     Space,
     system-ui,
     sans-serif;
-  background: #090914;
+  background: #160e2a;
   color: var(--ink);
 }
 * {
@@ -33,16 +36,14 @@ body {
   margin: 0;
   min-height: 100dvh;
   isolation: isolate;
-  background: #090914;
+  background: #160e2a;
 }
 body:before {
   content: "";
   position: fixed;
   z-index: -1;
   inset: 0;
-  background:
-    linear-gradient(180deg, #05040e26, transparent 63%, #06071033),
-    var(--optics) center bottom / cover no-repeat;
+  background: var(--optics);
   pointer-events: none;
 }
 button,
@@ -300,12 +301,12 @@ h2 {
 .gateform .sub {
   margin-top: 4px;
 }
-form {
+.gateform form {
   display: grid;
   gap: 16px;
   margin-top: 23px;
 }
-form label {
+.gateform label {
   display: grid;
   gap: 5px;
   font-size: 14px;
@@ -818,8 +819,8 @@ html[dir="ltr"] .rail {
   .sub {
     font-size: 15px;
   }
-  form {
-    margin-top: 14px;
+  .gateform form {
+    margin-top: 18px;
     gap: 11px;
   }
   .field input {
@@ -996,7 +997,7 @@ html[dir="ltr"] textarea:placeholder-shown {
   z-index: -1;
   border-radius: inherit;
   pointer-events: none;
-  background: var(--optics) 52% 46% / 118vw auto fixed;
+  background: var(--optics) fixed;
   opacity: 0.26;
   mask-image: linear-gradient(135deg, #000, transparent 46%, #0009);
 }
@@ -1035,7 +1036,7 @@ h2,
 .empty p {
   text-align: center;
 }
-form label,
+.gateform label,
 .field input,
 .composer textarea {
   text-align: start;
@@ -1051,7 +1052,7 @@ form label,
 .shortcut {
   font-size: 14px;
 }
-form label {
+.gateform label {
   font-size: 15px;
 }
 .rail .brand {
@@ -1440,6 +1441,7 @@ html[dir="rtl"] [name="password"]:placeholder-shown {
   mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
   mask-composite: exclude;
 }
 .voice-stage .identity-field {
@@ -1533,4 +1535,173 @@ html[dir="rtl"] [name="password"]:placeholder-shown {
 }
 .trace-detail {
   margin-bottom: 0;
+}
+
+/* Material and typography shared by the entrance and the application. */
+.gateform {
+  width: min(100%, 480px);
+  padding: clamp(24px, 5vw, 40px);
+  border-radius: clamp(25px, 4vw, 34px);
+  background: linear-gradient(147deg, #e2cafa26, #32204c66 49%, #4d53834d);
+  box-shadow:
+    inset 0 1px #f9e8ff80,
+    inset 0 -1px #928bd441,
+    0 28px 86px #10051e80;
+}
+.gateform h1 {
+  font-size: clamp(24px, 4.8vw, 31px);
+  font-weight: 750;
+}
+.gateform .sub {
+  color: #e1d4ed;
+}
+.gateform .identity strong {
+  color: #f0d9ff;
+  font-size: 18px;
+}
+.gateform form {
+  margin-top: 24px;
+}
+html[dir="rtl"] .gateform .field input:not([name="code"]) {
+  text-align: right;
+}
+.gateform .field {
+  background: #17102987;
+  border-color: #d8b7ff49;
+}
+.gateform .primary,
+.send:not(:disabled) {
+  background: linear-gradient(112deg, #5e37a6, #7134b8 63%, #5d339d);
+  border-color: #dbb9ff77;
+  box-shadow:
+    inset 0 1px #f4d9ff69,
+    0 5px 20px #20103966;
+  color: #fff;
+  opacity: 1;
+}
+.gateform .primary {
+  min-height: 52px;
+  font-size: 16px;
+}
+.gateform .reviewbtn {
+  min-height: 34px;
+  font-size: 13px;
+}
+.glass::after,
+.surface::after {
+  background: linear-gradient(131deg, #ecd2ffc2, transparent 22%, transparent 72%, #a1cefa75);
+}
+.rail {
+  background: linear-gradient(145deg, #5034738a, #211636af 72%, #29345b80);
+}
+.rail .brand {
+  direction: inherit;
+  font-family: inherit;
+  font-size: 16px;
+  letter-spacing: 0;
+}
+.navbtn {
+  font-size: 16px;
+}
+.navbtn.selected {
+  background: #8c57c63f;
+  box-shadow:
+    inset -2px 0 #d0aaff,
+    inset 0 1px #e6c8ff36;
+}
+.greeting .emblem {
+  margin-bottom: 19px;
+  width: 78px;
+  height: 78px;
+  background: linear-gradient(145deg, #b785ea6e, #3220507a 70%, #42457899);
+}
+.greeting .emblem img {
+  width: 56px;
+  height: 56px;
+}
+.composer {
+  margin-block: 0;
+  background: linear-gradient(142deg, #7f509342, #2c1c42a6 54%, #38648236);
+}
+.composer textarea,
+.thread {
+  font-size: 17px;
+  line-height: 1.85;
+  text-align: start;
+}
+.tools .textbtn {
+  text-align: start;
+  margin: 0;
+  padding-inline: 7px;
+}
+.status:empty {
+  display: none;
+}
+.thread {
+  display: grid;
+  gap: 12px;
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+}
+.turn {
+  max-width: 90%;
+  padding: 12px 16px;
+  border: 1px solid #e1c2ff30;
+  border-radius: 18px;
+  background: #241638de;
+  overflow-wrap: anywhere;
+}
+.turn.human {
+  justify-self: end;
+}
+.turn.assistant {
+  justify-self: start;
+  background: #211c39e3;
+}
+.turn strong {
+  color: #ecd1ff;
+  font-size: 14px;
+}
+.turn p {
+  white-space: pre-wrap;
+}
+.voice-signal {
+  display: grid;
+  place-items: center;
+  margin: 22px auto 16px;
+  width: 122px;
+  height: 122px;
+  color: #e1c8ff;
+  border-radius: 34px;
+}
+.voice-signal .ico {
+  width: 48px;
+  height: 48px;
+}
+.voice-stage[data-state="listening"] .voice-signal,
+.voice-stage[data-state="speaking"] .voice-signal {
+  color: #c1eeff;
+}
+h3 {
+  text-align: center;
+}
+@media (max-width: 720px) {
+  .tools {
+    display: flex;
+  }
+  .tools .voicebtn {
+    margin-inline-start: auto;
+  }
+  .tools .textbtn .ico {
+    display: none;
+  }
+  .gateform form {
+    margin-top: 18px;
+  }
+}
+@media (max-width: 390px) {
+  .tools .voicebtn .ico {
+    display: none;
+  }
 }

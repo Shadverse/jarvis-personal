@@ -1,4 +1,14 @@
-# SHADVERSE JARVIS · Luminous particle face
+# SHADVERSE JARVIS · Luminous particle motion
+
+The human-derived portrait is retained for motion testing in the local and portable review, which are separate from the signed-in product surface. The approved robotic head is pending. The recovery checked three pre-existing commercially usable candidates:
+
+| Asset           | Source and license                                                                                                                                         | Fit                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| RobotExpressive | [Tomás Laulhé / three.js, CC0 1.0](https://github.com/mrdoob/three.js/blob/dev/examples/models/gltf/RobotExpressive/README.md)                             | Cartoon expression and proportions     |
+| Astra Lumen     | [XRProfXR, Creative Commons Attribution](https://sketchfab.com/3d-models/astra-lumen-a-friendly-sci-fi-companion-android-21f9abdbe710461db4699335d489f092) | Helmet and segmented armor geometry    |
+| Robot Head 2    | [mgfxer, Creative Commons Attribution](https://sketchfab.com/3d-models/robot-head-2-f7ffd76310214fb99fe5466a68aea041)                                      | Exposed hard-surface mechanical plates |
+
+None of these candidate assets is distributed. The brand mark and existing glass artwork are SHADVERSE assets. The self-hosted [Vazirmatn](https://github.com/rastikerdar/vazirmatn) and [Space Grotesk](https://github.com/floriankarsten/space-grotesk) fonts are distributed under SIL Open Font License 1.1.
 
 The portrait samples the anatomical contours of the MakeHuman hm08 head. Its 44,478 point sites encode position, smooth normal and ambient visibility. A colour-masked pass over 8,968 triangles sets depth only. The second pass draws all visible colour as individual light-emitting particles. Violet fills the front, magenta sculpts the cheeks and brow, and a cooler rim separates the far temple from the purple environment. A small subset of particles disperses beyond the head and the neckline fades.
 
@@ -24,7 +34,7 @@ The brief identifies the sources as Dogstudio / DEPT Pioneer and Neuradigi. The 
 - To regenerate both binaries, download that revision of `base.obj` and run `OPENBLAS_NUM_THREADS=1 python art-tools/sample-face.py /path/to/base.obj` with NumPy and SciPy installed. The sampler checks the input SHA-256. It intersects horizontal planes with the head, interpolates vertex normals, then estimates ambient visibility from 24 depth projections.
 - SHADVERSE authored the shaders, environment and glass normal map. The instrument separates the luminous trace from its refractive outer panel and displays the median, peak and time span of the measured sample window.
 
-- The prerecorded English test sentence was synthesized offline using FFmpeg’s Flite source and the CMU `kal` voice. Only the generated waveform is bundled. No voice model or synthesis executable ships with the app. [Flite source and license](https://github.com/festvox/flite)
+- The prerecorded English test sentence was synthesized offline using FFmpeg’s Flite source and the CMU `kal` voice. Only the generated waveform is bundled, encoded as MP3 for wider browser playback support. No voice model or synthesis executable ships with the app. [Flite source and license](https://github.com/festvox/flite)
 - The existing Vazirmatn and Space Grotesk fonts are self-hosted with their OFL notices. OpenClaw retains its MIT attribution. The preview embeds the font notices. The visual research links above are references only.
 
 ## Runtime boundaries

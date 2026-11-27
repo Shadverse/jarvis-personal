@@ -1,6 +1,6 @@
 // Microphone samples stay in this document. Only the preview player's source
 // connects to the speakers. Both paths use the same audio measurements.
-import sample from "./voice.ogg";
+import sample from "./voice.mp3";
 export class Signal {
   constructor(onEnd) {
     this.onEnd = onEnd;

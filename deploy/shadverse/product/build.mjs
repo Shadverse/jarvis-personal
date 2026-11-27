@@ -15,6 +15,7 @@ for (const asset of [
 ])
   await cp("web/" + asset, "dist/" + asset, { recursive: true });
 await build({
+  absWorkingDir: process.cwd(),
   entryPoints: ["web/app.js", "web/style.css"],
   outdir: "dist",
   bundle: true,
@@ -26,7 +27,7 @@ await build({
     ".png": "dataurl",
     ".points": "binary",
     ".mesh": "binary",
-    ".ogg": "binary",
+    ".mp3": "binary",
   },
   assetNames: "assets/[name]",
 });
