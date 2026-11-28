@@ -95,7 +95,7 @@ export function getSession(db, cookie = "") {
     match &&
     db
       .prepare(
-        "SELECT s.id,s.csrf,u.name,u.role FROM sessions s JOIN users u ON u.id=s.user WHERE s.id=? AND s.expires>?",
+        "SELECT s.id,s.csrf,u.id AS userId,u.name,u.role FROM sessions s JOIN users u ON u.id=s.user WHERE s.id=? AND s.expires>?",
       )
       .get(digest(match[1]), Date.now())
   );

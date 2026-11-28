@@ -2,9 +2,9 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Phase C · Persian voice and local device capabilities
+**Active milestone** Phase D · Explicit personal memory
 
-**Latest verified remote checkpoint before Phase C** `620669c47daa45706bd25f0b2b21000d006919d4`
+**Latest verified remote checkpoint before Phase D** `62682c14b4aab25ec4f9943c9f4e3e9f248ed7bc`
 
 **Phase A live acceptance** PENDING. The Phase A checkpoint is on the remote branch.
 **Graphics** Frozen. The current interface and isolated hologram preview are retained.
@@ -24,7 +24,8 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | C | Single Persian voice turn, speech-to-chat, local synthesis and cancellation | IMPLEMENTED — LIVE ACCEPTANCE PENDING | Browser and Gateway fixtures exercised the signed-in path, local-only requirements, disconnect propagation and text fallback. Actual Persian audio, live inference and native playback require an authorized staging device. |
 | C | Streaming speech, hands-free conversation, device selection and voice activity detection | MISSING | The current implementation handles one explicit turn. |
 | D | Persistent Creator session context | PARTIALLY IMPLEMENTED | The existing OpenClaw session owns context. The product does not restore displayed turns on reload. |
-| D | Preferences, personal and project memory, retrieval, long-term knowledge, search, edit, delete, export and backup | MISSING | Product storage and per-user isolation are absent. Existing upstream operator capabilities require a product integration. |
+| D | Explicit personal notes, text search, edit, delete and export | VERIFIED LOCAL | Saved in the private product SQLite store by authenticated owner. The API fixture checked sign-out and sign-in persistence, persisted bytes on a separate database connection, and cross-account read or mutation denial. |
+| D | Preferences, project memory, retrieval into inference, long-term knowledge and managed backup | MISSING | Existing upstream operator capabilities require a scoped product integration. |
 | E | Attachment selection and local image thumbnails | PARTIALLY IMPLEMENTED | Local selection and preview exist. The product rejects inference requests with attachments. |
 | E | Image and screenshot understanding, documents, PDFs, spreadsheets, uploads, secure storage, camera, voice attachments and authorized visual search | MISSING | No product ingestion or model dispatch for these formats. |
 | F | Provider-backed image, video, audio and music creation, documents, presentations, spreadsheets and downloadable artifacts | MISSING | Product capability catalog and generation adapters are absent. |
@@ -67,3 +68,10 @@ In the authenticated Creator Voice screen, the microphone control runs one Persi
 **Local proof.** The targeted Chromium test used injected speech fixtures and a local HTTP Gateway fixture. It checked that recognition and playback remain local, the synthetic Persian transcript traverses the authenticated production route, unavailable recognition sends no inference request, and cancel closes the active Gateway connection. No provider was contacted and no actual Persian audio was recognized.
 
 **Next independent milestone.** Persist explicitly saved personal memory notes under the authenticated account, with local ownership tests.
+
+
+## Phase D checkpoint
+
+Signed-in users can save, search, edit, delete and export their own explicit notes from Workspace → Memory with no project selected. Notes stay in the owner-only SHADVERSE SQLite state directory across sign-out. Project notes keep their existing local behavior. The API scopes list, update, delete and export to the authenticated account, including when the caller is the Creator, and requires CSRF on writes. Each account has a 100-note cap. Only the explicit Add action saves a note. The product does not send memory to an inference provider.
+
+**Next independent milestone.** Add explicit local document upload and download with ownership and quota enforcement before connecting any document to the Gateway.

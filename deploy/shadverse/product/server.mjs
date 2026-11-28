@@ -13,9 +13,11 @@ import {
   sessionAge,
 } from "./auth.mjs";
 import { loadGateway, postResponses, readGatewayJson } from "./gateway.mjs";
+import { openMemory } from "./memory.mjs";
 import { createModelRegistry, loadModelPolicy, readUsage } from "./models.mjs";
 process.umask(0o077);
 const db = openStore(process.env.JARVIS_STATE);
+const memory = openMemory(db);
 const port = Number(process.env.PORT || 3000);
 const origin = new URL(process.env.JARVIS_ORIGIN || `http://localhost:${port}`);
 if (
@@ -91,6 +93,15 @@ createServer(async (req, res) => {
     if (req.method === "GET") {
       if (!session) return json(401, { error: "auth" });
       if (path === "/api/session") return json(200, sessionInfo(session));
+      if (path === "/api/memory") {
+        if (url.searchParams.get("export") === "1") {
+          res.setHeader(
+            "Content-Disposition",
+            'attachment; filename="jarvis-personal-memory.json"',
+          );
+        }
+        return json(200, { notes: memory.list(session.userId) });
+      }
       if (path === "/api/models") {
         if (!canChat(session)) return json(403, { error: "forbidden" });
         return json(200, models?.inspect() ?? { status: "unconfigured" });
@@ -106,7 +117,8 @@ createServer(async (req, res) => {
       return json(403, { error: "origin" });
     const chat = path === "/api/chat";
     const manageModels = path === "/api/models";
-    if (chat || manageModels || path === "/api/logout") {
+    const manageMemory = path === "/api/memory";
+    if (chat || manageModels || manageMemory || path === "/api/logout") {
       if (!session) {
         if (path === "/api/logout") res.setHeader("Set-Cookie", cookie("", 0));
         return json(401, { error: "auth" });
@@ -117,7 +129,7 @@ createServer(async (req, res) => {
         res.setHeader("Set-Cookie", cookie("", 0));
         return json(200, { ok: true });
       }
-      if (!canChat(session)) return json(403, { error: "forbidden" });
+      if (!manageMemory && !canChat(session)) return json(403, { error: "forbidden" });
     } else {
       if (!["/api/login", "/api/activate"].includes(path)) return json(404, { error: "missing" });
       if (pending >= 4 || rateLimit(db, "ip/" + req.socket.remoteAddress, 40))
@@ -136,6 +148,12 @@ createServer(async (req, res) => {
       body = JSON.parse(Buffer.concat(chunks));
     } catch {
       return json(400, { error: "invalid" });
+    }
+    if (manageMemory) {
+      const error = memory.change(session.userId, body);
+      if (error)
+        return json(error === "note_missing" ? 404 : error === "note_cap" ? 409 : 400, { error });
+      return json(200, { notes: memory.list(session.userId) });
     }
     if (manageModels) {
       if (!models) return json(409, { error: "no_model" });

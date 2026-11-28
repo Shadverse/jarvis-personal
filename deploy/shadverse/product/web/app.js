@@ -44,6 +44,8 @@ let head = null,
 let projects = [],
   activeProject = "",
   notes = [],
+  personalNotes = null,
+  editingNote = null,
   savedDrafts = [],
   resources = [],
   query = "";
@@ -67,6 +69,8 @@ function clearWorkspace() {
   projects = [];
   activeProject = "";
   notes = [];
+  personalNotes = null;
+  editingNote = null;
   savedDrafts = [];
   resources = [];
   turns = [];
@@ -235,8 +239,10 @@ function syncVoice() {
     b.setAttribute("aria-pressed", String(active));
   }
 }
+const personalMemory = () => Boolean(session && !review && page === "workspace" && tab === "memory" && !activeProject);
 function workspaceItems() {
   if (tab === "projects") return projects.map((name) => ({ name }));
+  if (personalMemory()) return (personalNotes ?? []).map((note) => ({ ...note, name: note.text }));
   const items =
     {
       history: savedDrafts,
@@ -256,19 +262,27 @@ function listItems() {
   return rows
     .map(
       ({ item, i }) =>
-        `<div class="work-row">${item.url ? `<img src="${item.url}" alt="">` : icon(glyph[tab])}<bdi>${safe(item.name)}</bdi>${tab === "history" || tab === "projects" ? button("open-item-" + i, icon("arrow") + t("باز کردن", "Open"), "outline") : ""}</div>`,
+        `<div class="work-row">${item.url ? `<img src="${item.url}" alt="">` : icon(glyph[tab])}<bdi>${safe(item.name)}</bdi>${personalMemory()
+          ? button("memory-edit-" + item.id, t("ویرایش", "Edit"), "outline") +
+            button("memory-delete-" + item.id, t("حذف", "Delete"), "outline")
+          : tab === "history" || tab === "projects" ? button("open-item-" + i, icon("arrow") + t("باز کردن", "Open"), "outline") : ""}</div>`,
     )
     .join("");
 }
 function space() {
   const add = tab === "projects" || tab === "memory";
+  const editing = personalMemory() && personalNotes?.find((note) => note.id === editingNote);
   return (
     title("workspace") +
     `<section class="surface stack"><div class="seg">${["history", "projects", "memory", "files", "gallery"].map((k) => button("tab-" + k, label(k), tab === k ? "on" : "")).join("")}</div>
- <h2>${label(tab)}</h2><p class="sub">${t("محتوای محلی این نشست با خروج پاک می‌شود.", "Local session content clears on sign-out.")}</p>
+ <h2>${label(tab)}</h2><p class="sub">${personalMemory()
+   ? t("تنها یادداشت‌هایی که خودتان ذخیره می‌کنید در حساب شما می‌مانند.", "Only notes you save explicitly stay in your account.")
+   : t("محتوای محلی این نشست با خروج پاک می‌شود.", "Local session content clears on sign-out.")}</p>
  <div class="controls"><label class="field">${icon("search")}<input type="search" id="search" aria-label="${t("جست‌وجو", "Search")}" value="${safe(query)}" placeholder="${t("جست‌وجو", "Search")}"></label>
  <select id="project-filter" aria-label="${t("پروژهٔ انتخابی", "Active project")}"><option value="">${t("همهٔ پروژه‌ها", "All projects")}</option>${projects.map((n) => `<option ${n === activeProject ? "selected" : ""}>${safe(n)}</option>`).join("")}</select></div>
- ${add ? `<div class="controls"><label class="field"><input id="item-name" dir="auto" maxlength="500" placeholder="${tab === "projects" ? t("نام پروژه", "Project name") : t("یادداشت حافظه", "Memory note")}" aria-label="${label(tab)}"></label>${button("add-item", icon("layers") + t("افزودن", "Add"))}</div>` : ""}
+ ${add ? `<div class="controls"><label class="field"><input id="item-name" dir="auto" maxlength="500" value="${safe(editing?.text ?? "")}" placeholder="${tab === "projects" ? t("نام پروژه", "Project name") : t("یادداشت حافظه", "Memory note")}" aria-label="${label(tab)}"></label>${button("add-item", icon("layers") + (editing ? t("ذخیره", "Save") : t("افزودن", "Add")))}
+ ${editing ? button("memory-cancel", t("انصراف", "Cancel"), "outline") : ""}
+ ${personalMemory() ? `<a href="/api/memory?export=1" class="outline">${t("خروجی حافظه", "Export memory")}</a>` : ""}</div>` : ""}
  ${["files", "gallery"].includes(tab) ? `<input type="file" id="workspace-file" multiple hidden ${tab === "gallery" ? 'accept="image/png,image/jpeg,image/webp"' : ""}>${button("pick-file", icon("attach") + t("انتخاب فایل محلی", "Choose local file"))}` : ""}
  <div id="results">${listItems()}</div></section>`
   );
@@ -390,6 +404,8 @@ function errorText(code) {
       "دریافت پاسخ از جارویس ممکن نشد. دوباره تلاش کنید.",
       "JARVIS could not respond. Try again.",
     ),
+    note_missing: t("این یادداشت در حساب شما پیدا نشد.", "This note was not found in your account."),
+    note_cap: t("به سقف ۱۰۰ یادداشت رسیده‌اید.", "Your account has reached its 100-note limit."),
     speech_local: t("بازشناسی فارسی روی دستگاه در دسترس نیست. از گفت‌وگوی متنی استفاده کنید.", "Local Persian recognition is unavailable. Use Text chat."),
     speech_permission: t("دسترسی میکروفون رد شد. مجوز مرورگر یا گفت‌وگوی متنی را بررسی کنید.", "Microphone access was denied. Check browser permissions or use Text chat."),
     speech_empty: t("گفتار تشخیص داده نشد. دوباره تلاش کنید یا پیام را بنویسید.", "No speech was recognized. Try again or type your message."),
@@ -549,6 +565,42 @@ app.addEventListener("submit", async (event) => {
   }
   render();
 });
+async function loadPersonalMemory() {
+  const requester = session;
+  try {
+    const result = await api("memory");
+    if (session !== requester || !personalMemory() || personalNotes !== null) return;
+    personalNotes = result.notes;
+  } catch (error) {
+    if (session !== requester || !personalMemory()) return;
+    if (error.message === "auth") returnToGate();
+    else feedback = errorText(error.message);
+  }
+  if (session === requester && personalMemory()) render();
+}
+async function changePersonalMemory(body, control) {
+  const requester = session;
+  control.disabled = true;
+  try {
+    const result = await api("memory", body);
+    if (session !== requester) return;
+    personalNotes = result.notes;
+    editingNote = null;
+  } catch (error) {
+    if (session !== requester) return;
+    if (error.message === "auth") returnToGate();
+    else {
+      feedback = errorText(error.message);
+      if (personalMemory()) {
+        render();
+        const field = app.querySelector("#item-name");
+        if (body.text && field) field.value = body.text;
+      }
+      return;
+    }
+  }
+  if (session === requester && personalMemory()) render();
+}
 app.addEventListener("click", async (event) => {
   const control = event.target.closest("[data-action]");
   if (!control) return;
@@ -590,9 +642,31 @@ app.addEventListener("click", async (event) => {
     render();
     return;
   }
+  if (personalMemory() && action.startsWith("memory-")) {
+    if (action === "memory-cancel") {
+      editingNote = null;
+      render();
+      return;
+    }
+    const noteAction = /^memory-(edit|delete)-([a-f0-9-]{36})$/.exec(action);
+    const note = personalNotes?.find((item) => item.id === noteAction?.[2]);
+    if (!note) return;
+    if (noteAction[1] === "edit") {
+      editingNote = note.id;
+      render();
+      app.querySelector("#item-name").focus();
+    } else if (confirm(t("این یادداشت حذف شود؟", "Delete this note?"))) {
+      await changePersonalMemory({ operation: "delete", id: note.id }, control);
+    }
+    return;
+  }
   if (action === "add-item") {
     const name = app.querySelector("#item-name").value.trim();
     if (!name) return;
+    if (personalMemory()) {
+      await changePersonalMemory({ operation: editingNote ? "edit" : "add", id: editingNote, text: name }, control);
+      return;
+    }
     if (tab === "projects") {
       if (!projects.includes(name)) projects.push(name);
       activeProject = name;
@@ -733,6 +807,7 @@ app.addEventListener("click", async (event) => {
     }
   }
   render();
+  if (personalMemory() && personalNotes === null) void loadPersonalMemory();
 });
 app.addEventListener("input", (event) => {
   if (event.target.id === "draft") draft = event.target.value;
@@ -744,7 +819,9 @@ app.addEventListener("input", (event) => {
 app.addEventListener("change", async (event) => {
   if (event.target.id === "project-filter") {
     activeProject = event.target.value;
+    editingNote = null;
     render();
+    if (personalMemory() && personalNotes === null) void loadPersonalMemory();
     return;
   }
   if (event.target.id === "workspace-file") {
