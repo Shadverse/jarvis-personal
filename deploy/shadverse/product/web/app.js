@@ -309,7 +309,7 @@ function remindersSection() {
   if (!privateProjects() || !dueReminders.length) return "";
   return `<section class="surface stack">
     <h3>${t("یادآورهای سررسیدشده", "Due reminders")}</h3>
-    ${dueReminders.map(({ project, title, due }) => `<div class="work-row"><bdi>${safe(project)} · ${safe(title)}</bdi><bdi>${safe(reminderDate(due))}</bdi></div>`).join("")}
+    ${dueReminders.map(({ id, project, title, due }) => `<div class="work-row"><bdi>${safe(project)} · ${safe(title)}</bdi><bdi>${safe(reminderDate(due))}</bdi>${button("reminder-ack-" + id, t("دیدم", "Acknowledge"))}</div>`).join("")}
   </section>`;
 }
 function projectTasks() {
@@ -498,6 +498,7 @@ function errorText(code) {
     integration_scope: t("مجوز این اتصال فعال نیست.", "Connector permission is inactive."),
     integration_invalid: t("درخواست اتصال معتبر نیست.", "Invalid connector request."),
     project_missing: t("پروژه در حساب شما پیدا نشد.", "This project was not found in your account."),
+    reminder_missing: t("یادآور دیگر در فهرست سررسید نیست.", "This reminder is no longer due."),
     reminder_invalid: t("زمانی در آینده و حداکثر تا یک سال دیگر انتخاب کنید.", "Choose a future time within the next year."),
     task_closed: t("یادآور فقط برای وظیفهٔ باز تنظیم می‌شود.", "Reminders can be scheduled for open tasks."),
     task_missing: t("این وظیفه در پروژه پیدا نشد.", "This task was not found in the project."),
@@ -897,6 +898,29 @@ app.addEventListener("click", async (event) => {
       taskView = { id, name, tasks: [], busy: false, error: "", input: "", reminderId: null, reminderInput: "" };
       await updateTasks();
     }
+    return;
+  }
+  if (privateProjects() && action.startsWith("reminder-ack-")) {
+    const reminder = dueReminders.find(({ id }) => id === action.slice("reminder-ack-".length));
+    if (!reminder) return;
+    const requester = session;
+    control.disabled = true;
+    try {
+      const result = await api("actions", {
+        action: "task.acknowledgeReminder",
+        input: { projectId: reminder.projectId, taskId: reminder.id, due: reminder.due },
+      });
+      if (session === requester) dueReminders = result.dueReminders;
+    } catch (error) {
+      if (session !== requester) return;
+      if (error.message === "auth") returnToGate();
+      else {
+        feedback = errorText(error.message);
+        if (error.message === "reminder_missing")
+          dueReminders = dueReminders.filter((item) => item !== reminder);
+      }
+    }
+    if (session === requester && privateProjects()) render();
     return;
   }
   if (privateProjects() && taskView) {

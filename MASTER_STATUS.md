@@ -37,7 +37,7 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | G–I | Automatic, device and scheduled execution | MISSING | No assistant-driven execution, device companion or scheduler. |
 | H | Local Workspace connector grants | VERIFIED LOCAL | One read-only account-scoped connector has a 15-minute grant, explicit revocation, and usage count. The fixture checked denial of unapproved scopes and connectors. |
 | H | Email, calendar, web search, GitHub, cloud storage, messaging, APIs and MCP integrations | DISABLED | Catalog entries are unavailable. Official provider authorization, external adapters and credentials are pending. |
-| I | Private task reminders | VERIFIED LOCAL | One cancellable deadline per task, with due reminders queried in the signed-in project workspace. Ownership, time boundaries and suppression on completion passed the targeted API fixture. |
+| I | Private task reminders | VERIFIED LOCAL | One cancellable deadline per task with persistent acknowledgement. A repeated acknowledgement preserves its timestamp; rescheduling resets it. The local API fixture verified account isolation and stale-deadline rejection. |
 | I | Autonomous scheduler, workflows, triggers, worker recovery, outbound notifications and emergency stop | MISSING | No background execution subsystem or SHADVERSE admission for upstream scheduling. |
 | J | Creator role, read-only directory and operator registration codes and revocation | PARTIALLY IMPLEMENTED | Creator and member roles are present. Operator commands and the directory cover limited administration. |
 | J | Administrator role, suspension, provider and permission management, usage, spend, audit, security monitoring and emergency controls | MISSING | Product enforcement and administrative operations are absent. |
@@ -118,4 +118,6 @@ Monitor & Tools exposes a SHADVERSE Workspace connector that reads only the sign
 
 Authenticated users can set or cancel one reminder for a task in their own project. The server accepts a future timestamp within 366 days and persists it as an epoch in milliseconds. A due reminder appears in Projects when the view loads or task data refreshes. A completed task suppresses its reminder. Reopening restores the reminder unless it was canceled. No worker, external notification, provider call or unattended action runs. The isolated HTTP fixture covered separate accounts, a future timestamp, a deterministic overdue record, completed-task suppression, and cancellation. Browser date entry awaits private staging acceptance.
 
-**Exact continuation.** Add an owner-scoped, idempotent acknowledgement operation to the due-reminder view. Store acknowledgement with the deadline so rescheduling clears it. Then test two accounts, refresh persistence and repeated acknowledgements against one temporary database. Keep outbound notifications disabled until their separate consent and retry controls are implemented.
+Acknowledgement is scoped to the owner, project, task, and displayed deadline. It survives a fresh login and rescheduling clears it. The targeted HTTP fixture used private SQLite and synthetic accounts, including a direct persisted-state check.
+
+**Next checkpoint.** Connect explicit Creator memory selection and product conversation history.

@@ -88,7 +88,13 @@ test("private projects, tasks and reminders enforce explicit actions, quotas, an
   assert.deepEqual(other.projects, []);
   assert.deepEqual(
     other.registry.map((entry) => entry.id),
-    ["project.create", "task.create", "task.setCompleted", "task.setReminder"],
+    [
+      "project.create",
+      "task.create",
+      "task.setCompleted",
+      "task.setReminder",
+      "task.acknowledgeReminder",
+    ],
   );
   assert.equal((await post("logout", {}, member)).status, 200);
   assert.equal((await get(member)).status, 401);
@@ -167,6 +173,34 @@ test("private projects, tasks and reminders enforce explicit actions, quotas, an
   const due = (await (await get(restored)).json()).dueReminders;
   assert.deepEqual(due, [{ id: task.id, title: task.title, projectId, project: name, due: 1 }]);
   assert.deepEqual((await (await get(creator)).json()).dueReminders, []);
+  const ack = (due) => ({
+    action: "task.acknowledgeReminder",
+    input: { projectId, taskId: task.id, due },
+  });
+  assert.equal((await post("actions", ack(1), creator)).status, 404);
+  const acknowledged = await post("actions", ack(1), restored);
+  assert.equal(acknowledged.status, 200);
+  assert.deepEqual((await acknowledged.json()).dueReminders, []);
+  const saved = openStore(dir);
+  const record = () =>
+    saved
+      .prepare("SELECT due, acknowledged FROM project_task_reminders WHERE task_id=?")
+      .get(task.id);
+  try {
+    const old = record();
+    assert.ok(old.acknowledged > 1);
+    assert.equal((await post("actions", ack(1), restored)).status, 200);
+    assert.deepEqual(record(), old);
+    assert.deepEqual((await (await get(await signIn("member"))).json()).dueReminders, []);
+    assert.equal((await post("actions", setReminder(future), restored)).status, 200);
+    assert.equal(record().acknowledged, null);
+    assert.equal((await post("actions", ack(1), restored)).status, 404);
+    assert.equal((await post("actions", ack(future), restored)).status, 404);
+    saved.prepare("UPDATE project_task_reminders SET due=2 WHERE task_id=?").run(task.id);
+    assert.equal((await (await get(restored)).json()).dueReminders[0].due, 2);
+  } finally {
+    saved.close();
+  }
   assert.deepEqual((await (await post("actions", complete, restored)).json()).dueReminders, []);
   assert.equal((await post("actions", setReminder(future), restored)).status, 409);
   const canceled = await post("actions", setReminder(null), restored);

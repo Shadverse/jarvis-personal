@@ -30,6 +30,13 @@ const actions = [
     audit: "persisted_due_time",
     input: { projectId: "uuid", taskId: "uuid", due: "utcEpochMsOrNull" },
   },
+  {
+    ...localTaskAction,
+    id: "task.acknowledgeReminder",
+    description: "Acknowledge a due reminder",
+    audit: "persisted_acknowledgement",
+    input: { projectId: "uuid", taskId: "uuid", due: "utcEpochMs" },
+  },
 ];
 
 export function openTasks(db) {
@@ -47,6 +54,16 @@ export function openTasks(db) {
       due INTEGER NOT NULL
     );
   `);
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const columns = db.prepare("PRAGMA table_info(project_task_reminders)").all();
+    if (!columns.some(({ name }) => name === "acknowledged"))
+      db.exec("ALTER TABLE project_task_reminders ADD COLUMN acknowledged INTEGER");
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
   const project = db.prepare("SELECT id, name FROM workspace_projects WHERE id=? AND owner=?");
   const rows = db.prepare(`
     SELECT t.id, t.title, t.created, t.completed, r.due
@@ -73,7 +90,8 @@ export function openTasks(db) {
     INSERT INTO project_task_reminders (task_id, due)
     SELECT t.id, ? FROM project_tasks t JOIN workspace_projects p ON p.id=t.project_id
     WHERE t.id=? AND p.id=? AND p.owner=? AND t.completed IS NULL
-    ON CONFLICT(task_id) DO UPDATE SET due=excluded.due
+    ON CONFLICT(task_id) DO UPDATE SET due=excluded.due, acknowledged=CASE
+      WHEN project_task_reminders.due=excluded.due THEN project_task_reminders.acknowledged END
   `);
   const cancelReminder = db.prepare(`
     DELETE FROM project_task_reminders WHERE task_id IN (
@@ -81,11 +99,18 @@ export function openTasks(db) {
       WHERE t.id=? AND p.id=? AND p.owner=?
     )
   `);
+  const acknowledge = db.prepare(`
+    UPDATE project_task_reminders SET acknowledged=COALESCE(acknowledged, ?)
+    WHERE due=? AND due<=? AND task_id IN (
+      SELECT t.id FROM project_tasks t JOIN workspace_projects p ON p.id=t.project_id
+      WHERE t.id=? AND p.id=? AND p.owner=? AND t.completed IS NULL
+    )
+  `);
   const dueReminders = db.prepare(`
     SELECT t.id, t.title, p.id AS projectId, p.name AS project, r.due
     FROM project_task_reminders r JOIN project_tasks t ON t.id=r.task_id
       JOIN workspace_projects p ON p.id=t.project_id
-    WHERE p.owner=? AND t.completed IS NULL AND r.due<=?
+    WHERE p.owner=? AND t.completed IS NULL AND r.due<=? AND r.acknowledged IS NULL
     ORDER BY r.due, t.id LIMIT 50
   `);
   function list(owner, projectId) {
@@ -124,6 +149,12 @@ export function openTasks(db) {
           return { error: "task_invalid" };
         if (!insert.run(randomUUID(), name, Date.now(), projectId, owner).changes)
           return { error: "task_cap" };
+      } else if (action === "task.acknowledgeReminder") {
+        const now = Date.now();
+        if (typeof taskId !== "string" || !validId.test(taskId) || !Number.isSafeInteger(due))
+          return { error: "reminder_invalid" };
+        if (!acknowledge.run(now, due, now, taskId, projectId, owner).changes)
+          return { error: "reminder_missing" };
       } else if (action === "task.setReminder") {
         const now = Date.now();
         if (

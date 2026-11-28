@@ -59,7 +59,7 @@ const cookie = (value, age) =>
 function actionStatus({ error }) {
   if (!error) return 200;
   if (["project_cap", "task_cap", "task_closed"].includes(error)) return 409;
-  if (["project_missing", "task_missing"].includes(error)) return 404;
+  if (["project_missing", "task_missing", "reminder_missing"].includes(error)) return 404;
   return 400;
 }
 let pending = 0;
