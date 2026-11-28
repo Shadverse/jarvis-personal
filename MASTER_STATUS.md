@@ -23,7 +23,7 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | C | Prerecorded playback and demonstration voice states | MOCKED | A real prerecorded asset and illustrative state controls simulate interaction. |
 | C | Single Persian voice turn, speech-to-chat, local synthesis and cancellation | IMPLEMENTED — LIVE ACCEPTANCE PENDING | Browser and Gateway fixtures exercised the signed-in path, local-only requirements, disconnect propagation and text fallback. Actual Persian audio, live inference and native playback require an authorized staging device. |
 | C | Streaming speech, hands-free conversation, device selection and voice activity detection | MISSING | The current implementation handles one explicit turn. |
-| D | Persistent Creator session context | PARTIALLY IMPLEMENTED | The existing OpenClaw session owns context. The product does not restore displayed turns on reload. |
+| D | Persistent Creator session context | PARTIALLY IMPLEMENTED | OpenClaw keeps its stable Creator session. The product stores completed text and voice turns per Creator and restores them after reload or sign-in. HTTP and Chromium fixtures passed. |
 | D | Explicit personal notes, text search, edit, delete and export | VERIFIED LOCAL | Saved in the private product SQLite store by authenticated owner. The API fixture checked sign-out and sign-in persistence, persisted bytes on a separate database connection, and cross-account read or mutation denial. |
 | D | Preferences, project memory, retrieval into inference, long-term knowledge and managed backup | MISSING | Existing upstream operator capabilities require a scoped product integration. |
 | E | Attachment selection and local image thumbnails | PARTIALLY IMPLEMENTED | Local selection and preview exist. The product rejects inference requests with attachments. |
@@ -121,3 +121,8 @@ Authenticated users can set or cancel one reminder for a task in their own proje
 Acknowledgement is scoped to the owner, project, task, and displayed deadline. It survives a fresh login and rescheduling clears it. The targeted HTTP fixture used private SQLite and synthetic accounts, including a direct persisted-state check.
 
 **Next checkpoint.** Connect explicit Creator memory selection and product conversation history.
+
+
+## Conversation history checkpoint
+
+Product history records completed text and voice turns after successful Gateway replies. The authenticated Creator sees their own history, 25 turns at a time. A different Creator sees their own empty history and member access is denied. Failed and canceled fixture turns were excluded. Existing Gateway-only transcripts are not imported. Browser reload restoration was verified with a local Chromium fixture.

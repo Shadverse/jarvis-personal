@@ -13,6 +13,7 @@ import {
   validPassword,
   sessionAge,
 } from "./auth.mjs";
+import { openConversations } from "./conversations.mjs";
 import { documentBodyLimit, openDocuments } from "./documents.mjs";
 import { loadGateway, postResponses, readGatewayJson } from "./gateway.mjs";
 import { openIntegrations } from "./integrations.mjs";
@@ -21,6 +22,7 @@ import { createModelRegistry, loadModelPolicy, readUsage } from "./models.mjs";
 process.umask(0o077);
 const db = openStore(process.env.JARVIS_STATE);
 const memory = openMemory(db);
+const conversations = openConversations(db);
 const documents = openDocuments(db);
 const actions = openActions(db);
 const integrations = openIntegrations(db);
@@ -105,6 +107,14 @@ createServer(async (req, res) => {
     if (req.method === "GET") {
       if (!session) return json(401, { error: "auth" });
       if (path === "/api/session") return json(200, sessionInfo(session));
+      if (path === "/api/conversation") {
+        if (session.role !== "creator") return json(403, { error: "forbidden" });
+        const key = url.searchParams.get("before");
+        const before = key === null ? null : Number(key);
+        if (key !== null && (!/^\d+$/u.test(key) || !Number.isSafeInteger(before) || before < 1))
+          return json(400, { error: "invalid" });
+        return json(200, conversations.page(session.userId, before));
+      }
       if (path === "/api/integrations") return json(200, integrations.list(session.userId));
       if (path === "/api/actions") {
         const projectId = url.searchParams.get("project");
@@ -222,7 +232,8 @@ createServer(async (req, res) => {
     }
     if (chat) {
       const message = typeof body?.message === "string" ? body.message.trim() : "";
-      if (!message || message.length > 4000) return json(400, { error: "message" });
+      if (!message || message.length > 4000 || message.includes(gateway.token))
+        return json(400, { error: "message" });
       if (chatPending) return json(429, { error: "busy" });
       if (res.destroyed) return;
       chatPending = true;
@@ -290,7 +301,9 @@ createServer(async (req, res) => {
           }
           const ok = result?.status === "completed" && reply && !reply.includes(gateway.token);
           if (attempt) models.finish(attempt, ok ? "completed" : "uncertain", usage);
-          return ok ? json(200, { reply }) : json(502, { error: "gateway" });
+          if (!ok) return json(502, { error: "gateway" });
+          const turn = conversations.record(session.userId, message, reply);
+          return json(200, { reply, turn });
         }
       } finally {
         res.off("close", onClose);

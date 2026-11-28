@@ -173,5 +173,9 @@ test(
     assert.equal(canceled, true);
     await page.locator('.voice-dock [data-action="main"]').click();
     await page.locator(".turn.assistant").getByText("درود از جارویس").waitFor();
+    await page.reload();
+    await page.locator(".turn.assistant").getByText("درود از جارویس").waitFor();
+    assert.equal(await page.locator(".turn.human").count(), 1);
+    assert.equal(await page.locator(".turn.human p").textContent(), "سلام");
   },
 );

@@ -165,7 +165,7 @@ test("private managed routing admits only eligible routes and reserves ambiguous
       { ...creator, "x-openclaw-model": "platform/paid" },
     );
   const translated = await chat("ترجمه: سلام");
-  assert.deepEqual(await translated.json(), { reply: "پاسخ" });
+  assert.equal((await translated.json()).reply, "پاسخ");
   assert.deepEqual(
     requests.map((item) => item.model),
     ["local/translate", "local/general"],

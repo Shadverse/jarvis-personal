@@ -35,6 +35,9 @@ const safe = (value) =>
   );
 const canPreview = standalone || ["localhost", "127.0.0.1"].includes(location.hostname);
 let turns = [],
+  historyBefore = null,
+  historyLoading = false,
+  historyError = "",
   sending = false,
   chatFeedback = "";
 let workspaceEpoch = 0,
@@ -91,6 +94,9 @@ function clearWorkspace() {
   savedDrafts = [];
   resources = [];
   turns = [];
+  historyBefore = null;
+  historyLoading = false;
+  historyError = "";
   sending = false;
   chatFeedback = "";
   query = "";
@@ -173,7 +179,9 @@ function home() {
     .map(([key, [caption]]) => button("prompt-" + key, caption, "starter"))
     .join("")}</div></section>
  <section class="composearea" aria-label="${t("گفت‌وگو", "Conversation")}">
- ${turns.length ? `<ol class="thread" aria-label="${t("پیام‌های گفت‌وگو", "Conversation messages")}">${turns.map(({ speaker, text }) => `<li class="turn ${speaker}"><strong>${speaker === "assistant" ? productName() : t("شما", "You")}</strong><p>${safe(text)}</p></li>`).join("")}</ol>` : ""}
+ ${historyBefore !== null || historyError ? button("conversation-history", t("بارگیری پیام‌های پیشین", "Load earlier messages")) : ""}
+ ${historyError ? `<p role="status">${safe(historyError)}</p>` : ""}
+ ${turns.length ? `<ol class="thread" aria-label="${t("پیام‌های گفت‌وگو", "Conversation messages")}">${turns.map(({ message, reply }) => `<li class="turn human"><strong>${t("شما", "You")}</strong><p>${safe(message)}</p></li><li class="turn assistant"><strong>${productName()}</strong><p>${safe(reply)}</p></li>`).join("")}</ol>` : ""}
  <form id="conversation" class="composer glass"><textarea id="draft" maxlength="4000" aria-label="${t("پیام", "Message")}" placeholder="${t("برای جارویس شادوِرس بنویسید…", "Write your message…")}">${safe(draft)}</textarea>
  <div id="attachments">${files.map((f, i) => `<span class="chip"><bdi>${safe(f.name)}</bdi>${button("remove-" + i, icon("close"), "remove")}</span>`).join("")}</div>
  <div class="tools">${button("attach", icon("attach"), "iconbtn")}<input type="file" multiple id="file" hidden>${button("save-draft", icon("layers") + t("ذخیرهٔ پیش‌نویس", "Save draft"), "textbtn")}
@@ -542,6 +550,33 @@ function returnToGate() {
   feedback = errorText("auth");
   render();
 }
+function mergeTurns(batch) {
+  const existing = new Map(turns.map((turn) => [turn.id, turn]));
+  for (const turn of batch) existing.set(turn.id, turn);
+  turns = [...existing.values()].sort((a, b) => a.id - b.id);
+}
+async function loadConversation(before = null, control) {
+  if (session?.role !== "creator" || historyLoading) return;
+  const requester = session;
+  historyLoading = true;
+  if (control) control.disabled = true;
+  try {
+    const data = await api("conversation" + (before === null ? "" : "?before=" + before));
+    if (session !== requester) return;
+    mergeTurns(data.turns);
+    historyBefore = data.before;
+    historyError = "";
+  } catch (error) {
+    if (session !== requester) return;
+    if (error.message === "auth") returnToGate();
+    else historyError = t("بارگیری تاریخچه ممکن نشد.", "Conversation history could not be loaded.");
+  } finally {
+    if (session === requester) {
+      historyLoading = false;
+      if (page === "main") render();
+    }
+  }
+}
 async function runPersianTurn() {
   if (voiceRun) {
     stopAudio();
@@ -569,10 +604,10 @@ async function runPersianTurn() {
     demoState = "thinking";
     micState = t("جارویس در حال آماده‌کردن پاسخ است…", "JARVIS is preparing a reply…");
     syncVoice();
-    const { reply } = await api("chat", { message }, controller.signal);
+    const { reply, turn } = await api("chat", { message }, controller.signal);
     controller.signal.throwIfAborted();
     if (session !== requester) return;
-    turns.push({ speaker: "human", text: message }, { speaker: "assistant", text: reply });
+    mergeTurns([turn]);
     const voice = localPersianVoice();
     if (!voice) {
       micState = errorText("speech_playback");
@@ -623,9 +658,9 @@ app.addEventListener("submit", async (event) => {
       "JARVIS is preparing a reply…",
     );
     try {
-      const { reply } = await api("chat", { message });
+      const { turn } = await api("chat", { message });
       if (session !== requester) return;
-      turns.push({ speaker: "human", text: message }, { speaker: "assistant", text: reply });
+      mergeTurns([turn]);
       if (draft.trim() === message) draft = "";
     } catch (err) {
       if (session !== requester) return;
@@ -662,6 +697,7 @@ app.addEventListener("submit", async (event) => {
       review = false;
       page = "main";
       feedback = "";
+      void loadConversation();
     }
   } catch (err) {
     feedback = errorText(err.message);
@@ -815,6 +851,10 @@ app.addEventListener("click", async (event) => {
   if (!control) return;
   const action = control.dataset.action;
   feedback = "";
+  if (action === "conversation-history") {
+    await loadConversation(historyBefore, control);
+    return;
+  }
   const modelAction = /^model-(pause|resume)-([a-z0-9-]+)$/.exec(action);
   if (modelAction && page === "admin" && session?.chatAvailable) {
     const requester = session;
@@ -1217,6 +1257,7 @@ function showSession(user) {
   session = user;
   page = "main";
   render();
+  void loadConversation();
 }
 if (standalone && location.hash === "#voice") {
   review = true;

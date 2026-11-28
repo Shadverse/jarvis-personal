@@ -134,7 +134,10 @@ test(
       user: "untrusted",
       tools: [{ type: "test" }],
     };
+    const history = (headers, query = "") =>
+      fetch(origin + "/api/conversation" + query, { headers });
     assert.equal((await post("/api/chat", body)).status, 401);
+    assert.equal((await history()).status, 401);
     for (const name of ["member", "other-creator"]) {
       const { data, headers } = await authorize(name);
       assert.equal(data.chatAvailable, false);
@@ -148,6 +151,7 @@ test(
     );
     assert.equal((await post("/api/chat", body, { ...headers, "X-CSRF-Token": "" })).status, 403);
     assert.equal((await post("/api/chat", { message: " " }, headers)).status, 400);
+    assert.equal((await post("/api/chat", { message: token }, headers)).status, 400);
     assert.equal(requests.length, 0);
     const response = await post("/api/chat", body, {
       ...headers,
@@ -155,7 +159,12 @@ test(
       "x-openclaw-model": "untrusted",
     });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { reply: "پاسخ آزمایشی" });
+    const completed = await response.json();
+    assert.equal(completed.reply, "پاسخ آزمایشی");
+    assert.equal(completed.turn.message, "سلام");
+    assert.equal(completed.turn.reply, completed.reply);
+    assert.equal(completed.turn.owner, undefined);
+    assert.ok(!JSON.stringify(completed).includes(token));
     assert.equal(requests[0].path, "/v1/responses");
     assert.equal(requests[0].headers.authorization, "Bearer " + token);
     assert.equal(requests[0].headers.cookie, undefined);
@@ -179,10 +188,30 @@ test(
     failUpstream = false;
     const restored = await authorize("creator");
     assert.notEqual(restored.headers.Cookie, headers.Cookie);
+    assert.deepEqual(await (await history(restored.headers)).json(), {
+      turns: [completed.turn],
+      before: null,
+    });
+    const memberHistory = await history((await authorize("member")).headers);
+    assert.equal(memberHistory.status, 403);
+    const other = (await authorize("other-creator")).headers;
+    assert.deepEqual(await (await history(other, "?before=999")).json(), {
+      turns: [],
+      before: null,
+    });
     const followUp = await post("/api/chat", { message: "پیام دوم" }, restored.headers);
     assert.equal(followUp.status, 200);
     assert.equal(requests[2].body.input, "پیام دوم");
     assert.equal(requests[2].body.user, requests[0].body.user);
+    const stored = await (await history(restored.headers)).json();
+    assert.deepEqual(
+      stored.turns.map(({ message }) => message),
+      ["سلام", "پیام دوم"],
+    );
+    assert.deepEqual(
+      (await (await history(restored.headers, "?before=" + stored.turns[1].id)).json()).turns,
+      [completed.turn],
+    );
 
     const check = (overrides = {}) =>
       promisify(execFile)(
