@@ -23,6 +23,7 @@ import { openIntegrations } from "./integrations.mjs";
 import { rankContext } from "./memory-context.mjs";
 import { openMemory } from "./memory.mjs";
 import { createModelRegistry, loadModelPolicy, readUsage } from "./models.mjs";
+import { openResearch } from "./research.mjs";
 import { visionBodyLimit } from "./vision-image.mjs";
 import { openVision } from "./vision.mjs";
 process.umask(0o077);
@@ -47,6 +48,10 @@ const vision = await openVision(db, gateway, port).catch(() => {
   console.error("Restricted vision admission is invalid. Vision dispatch is disabled.");
   return null;
 });
+const research = await openResearch(gateway, port).catch(() => {
+  console.error("Restricted research admission is invalid. Research dispatch is disabled.");
+  return null;
+});
 const modelPolicy = await loadModelPolicy();
 const models = modelPolicy && createModelRegistry(db, modelPolicy);
 const canChat = (user) =>
@@ -57,6 +62,7 @@ const sessionInfo = (user) => ({
   csrf: user.csrf,
   chatAvailable: canChat(user),
   vision: canChat(user) ? (vision?.limits ?? null) : null,
+  research: canChat(user) && Boolean(research),
 });
 const root = fileURLToPath(new URL("./dist/", import.meta.url));
 const types = {
@@ -255,6 +261,7 @@ createServer(async (req, res) => {
       return json(403, { error: "origin" });
     const chat = path === "/api/chat";
     const visionRequest = path === "/api/vision";
+    const researchRequest = path === "/api/research";
     const manageModels = path === "/api/models";
     const manageMemory = path === "/api/memory";
     const previewMemory = path === "/api/memory/context";
@@ -264,6 +271,7 @@ createServer(async (req, res) => {
     if (
       chat ||
       visionRequest ||
+      researchRequest ||
       manageModels ||
       manageMemory ||
       previewMemory ||
@@ -279,11 +287,15 @@ createServer(async (req, res) => {
       if (req.headers["x-csrf-token"] !== session.csrf) return json(403, { error: "csrf" });
       if (path === "/api/logout") {
         vision?.clear(session.id);
+        research?.clear(session.id);
         db.prepare("DELETE FROM sessions WHERE id=?").run(session.id);
         res.setHeader("Set-Cookie", cookie("", 0));
         return json(200, { ok: true });
       }
-      if ((chat || manageModels || visionRequest || previewMemory) && !canChat(session))
+      if (
+        (chat || manageModels || visionRequest || researchRequest || previewMemory) &&
+        !canChat(session)
+      )
         return json(403, { error: "forbidden" });
     } else {
       if (!["/api/login", "/api/activate"].includes(path)) return json(404, { error: "missing" });
@@ -310,6 +322,26 @@ createServer(async (req, res) => {
       body = JSON.parse(Buffer.concat(chunks));
     } catch {
       return json(400, { error: "invalid" });
+    }
+    if (researchRequest) {
+      if (!research) return json(503, { error: "research_unavailable" });
+      if (!body || Object.keys(body).some((key) => !["operation", "query", "id"].includes(key)))
+        return json(400, { error: "research_request" });
+      if (rateLimit(db, "research/" + session.userId, 12)) return json(429, { error: "limit" });
+      if (res.destroyed) return;
+      const cancel = new AbortController();
+      const onClose = () => cancel.abort();
+      res.once("close", onClose);
+      try {
+        const result = await research.run(session, body, cancel.signal);
+        if (result && !res.destroyed) {
+          const { status, ...data } = result;
+          return json(status, data);
+        }
+        return;
+      } finally {
+        res.off("close", onClose);
+      }
     }
     if (visionRequest) {
       if (body?.clear === true && Object.keys(body).length === 1) {

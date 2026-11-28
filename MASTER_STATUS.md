@@ -2,7 +2,7 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Functional completion · Intelligent memory and document intelligence
+**Active milestone** Functional completion · Research, actions and devices
 
 **Verified remote baseline for live integration** `320c5619f2cfa1510453bf362f17d3e31487f5d7`
 
@@ -176,4 +176,8 @@ The product reuses its private OpenClaw OpenResponses bridge for approved contex
 
 Workspace files can perform bounded local passage search, extractive summary, two-source comparison and spreadsheet statistics. A private optional worker parses PDF, DOCX, XLSX, PPTX and supported images and generates actual downloadable PDF, Word, Excel and PowerPoint reports with Persian RTL settings. Stored images can be queued to the existing Creator Vision preview by explicit action. No documents, prompts or provider calls leave the product during local analysis. Independent readers opened outputs in the authenticated integration test.
 
-**Next milestone.** Add a fixed, read-only OpenClaw research route with explicit activation and real source citations. Keep all externally sourced material outside the privileged conversation pipeline.
+## Restricted research checkpoint
+
+The Creator Research view can retrieve bounded structured citations and read listed pages through the documented OpenClaw tools endpoint. Use of the actual provider is disabled by default and deferred. The local HTTP fixture checked fixed tools, scope, structured source responses, provider mismatch, pinned-config invalidation, and no forwarded credentials in browser data. No external sources, prices or provider approval were fabricated.
+
+**Next milestone.** Connect explicit natural-language requests to the existing private action registry with a review step. Keep any device action disabled until a separately scoped paired runtime is authorized.

@@ -34,7 +34,23 @@ export async function readGatewayToken(tokenFile) {
   }
 }
 
-export async function postResponses(port, payload, token, timeout, modelOverride, cancel) {
+export function postResponses(port, payload, token, timeout, modelOverride, cancel) {
+  return postGatewayJson("/v1/responses", port, payload, token, timeout, cancel, modelOverride);
+}
+
+export function postResearchTool(port, tool, args, token, signal) {
+  if (!["web_search", "web_fetch"].includes(tool)) throw Error("Invalid research tool.");
+  return postGatewayJson(
+    "/tools/invoke",
+    port,
+    { tool, args, agentId: "research" },
+    token,
+    12_000,
+    signal,
+  );
+}
+
+function postGatewayJson(path, port, payload, token, timeout, cancel, modelOverride) {
   const body = Buffer.from(JSON.stringify(payload));
   return new Promise((resolve, reject) => {
     // A fresh direct loopback connection keeps the owner credential off environment proxies.
@@ -42,7 +58,7 @@ export async function postResponses(port, payload, token, timeout, modelOverride
       {
         host: "127.0.0.1",
         port,
-        path: "/v1/responses",
+        path,
         method: "POST",
         agent: false,
         signal: cancel
