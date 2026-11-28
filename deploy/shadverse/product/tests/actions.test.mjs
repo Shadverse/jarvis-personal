@@ -215,4 +215,41 @@ test("private projects, tasks and reminders enforce explicit actions, quotas, an
     restored,
   );
   assert.deepEqual((await afterCancel.json()).dueReminders, []);
+  const ask = (message, projectId, headers) =>
+    post(
+      "actions",
+      {
+        action: "intent.preview",
+        input: { message, projectId },
+      },
+      headers,
+    );
+  const settle = (id, operation, headers) =>
+    post("actions", { action: "intent." + operation, input: { id } }, headers);
+  assert.equal((await ask("run system command", null, creator)).status, 400);
+  assert.equal((await ask("open website javascript:alert(1)", null, creator)).status, 400);
+  const link = await ask("باز کردن سایت https://example.org/docs", null, creator);
+  assert.deepEqual((await link.json()).plan, {
+    action: "browser.open",
+    url: "https://example.org/docs",
+  });
+  assert.equal((await ask("ساخت وظیفه مورد دیگر", projectId, creator)).status, 404);
+  const plan = (await (await ask("ساخت وظیفه بررسی پیش‌نویس", projectId, restored)).json()).plan;
+  assert.equal((await (await getTasks(restored)).json()).tasks.length, 1);
+  assert.equal((await settle(plan.id, "confirm", creator)).status, 404);
+  assert.equal((await settle(plan.id, "confirm", await signIn("member"))).status, 404);
+  assert.equal((await settle(plan.id, "cancel", restored)).status, 200);
+  assert.equal((await settle(plan.id, "confirm", restored)).status, 404);
+  const finalPlan = (await (await ask("ساخت وظیفه بررسی پیش‌نویس", projectId, restored)).json())
+    .plan;
+  const performed = await settle(finalPlan.id, "confirm", restored);
+  assert.equal(performed.status, 200);
+  assert.ok((await performed.json()).tasks.some((item) => item.title === "بررسی پیش‌نویس"));
+  assert.equal((await settle(finalPlan.id, "confirm", restored)).status, 404);
+  const projectPlan = (await (await ask("create project Review project", null, creator)).json())
+    .plan;
+  assert.equal((await settle(projectPlan.id, "confirm", creator)).status, 200);
+  assert.ok(
+    (await (await get(creator)).json()).projects.some((item) => item.name === "Review project"),
+  );
 });

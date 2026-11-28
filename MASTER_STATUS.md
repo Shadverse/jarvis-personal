@@ -180,4 +180,8 @@ Workspace files can perform bounded local passage search, extractive summary, tw
 
 The Creator Research view can retrieve bounded structured citations and read listed pages through the documented OpenClaw tools endpoint. Use of the actual provider is disabled by default and deferred. The local HTTP fixture checked fixed tools, scope, structured source responses, provider mismatch, pinned-config invalidation, and no forwarded credentials in browser data. No external sources, prices or provider approval were fabricated.
 
-**Next milestone.** Connect explicit natural-language requests to the existing private action registry with a review step. Keep any device action disabled until a separately scoped paired runtime is authorized.
+## Reviewed action checkpoint
+
+Authenticated users can ask the composer to review a bounded Persian or English request to create a project, add a task to an owned project, or open an HTTPS site in their browser. The server returns a preview and scopes write approval to the session and a two-minute lifetime. A confirmation is single-use. Project ownership and quotas are enforced by the existing action registry at execution. Direct shell, privileged tools and device routing remain disabled. The HTTP integration test covered no write before approval, replay, cancellation, unauthorized project and cross-session denial.
+
+**Next milestone.** Define the paired-device identity and per-command grant boundary using OpenClaw's documented node protocol, with no real devices or credentials until Creator approval. Advance the independent local recurring-workflow path while live pairing and external connectors remain deferred.

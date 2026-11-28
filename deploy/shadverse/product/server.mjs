@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { resolve, extname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { openActionIntents } from "./action-intents.mjs";
 import { openActions } from "./actions.mjs";
 import {
   openStore,
@@ -32,6 +33,7 @@ const conversations = openConversations(db);
 const documentProcessor = await loadDocumentProcessor();
 const documents = openDocuments(db, documentProcessor);
 const actions = openActions(db);
+const actionIntents = openActionIntents(actions);
 const memory = openMemory(db);
 const integrations = openIntegrations(db);
 const port = Number(process.env.PORT || 3000);
@@ -92,7 +94,8 @@ function documentErrorStatus(error) {
 function actionStatus({ error }) {
   if (!error) return 200;
   if (["project_cap", "task_cap", "task_closed"].includes(error)) return 409;
-  if (["project_missing", "task_missing", "reminder_missing"].includes(error)) return 404;
+  if (["project_missing", "task_missing", "reminder_missing", "intent_missing"].includes(error))
+    return 404;
   return 400;
 }
 function lookupContext(session, options, message) {
@@ -288,6 +291,7 @@ createServer(async (req, res) => {
       if (path === "/api/logout") {
         vision?.clear(session.id);
         research?.clear(session.id);
+        actionIntents.clear(session.id);
         db.prepare("DELETE FROM sessions WHERE id=?").run(session.id);
         res.setHeader("Set-Cookie", cookie("", 0));
         return json(200, { ok: true });
@@ -371,7 +375,10 @@ createServer(async (req, res) => {
       return json(result.error === "integration_scope" ? 403 : result.error ? 400 : 200, result);
     }
     if (executeAction) {
-      const result = actions.execute(session.userId, body);
+      const result =
+        typeof body?.action === "string" && body.action.startsWith("intent.")
+          ? actionIntents.execute(session, body)
+          : actions.execute(session.userId, body);
       return json(actionStatus(result), result);
     }
     if (manageDocuments) {

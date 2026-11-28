@@ -61,6 +61,7 @@ let projects = [],
   selectedMemory = null,
   rankedMemory = null,
   includeEarlierQuestions = false,
+  actionPlan = null,
   editingNote = null,
   privateDocuments = null,
   documentFormats = { read: [], write: [] },
@@ -103,6 +104,7 @@ function clearWorkspace() {
   selectedMemory = null;
   rankedMemory = null;
   includeEarlierQuestions = false;
+  actionPlan = null;
   editingNote = null;
   privateDocuments = null;
   documentFormats = { read: [], write: [] };
@@ -222,6 +224,15 @@ function memoryComposer() {
       <ul>${preview.map(({ kind, text }) => `<li><bdi>${memoryKinds()[kind]} · ${safe(text)}</bdi></li>`).join("")}</ul>
       <p class="sub">${t("با ارسال پیام، موارد بالا به مدل فرستاده می‌شوند.", "Sending shares the items above with the configured model.")}</p></div>` : ""}`;
 }
+function actionComposer() {
+  if (!session || review) return "";
+  const plan = actionPlan?.prompt === draft.trim() ? actionPlan : null;
+  return `<div class="controls">${button("intent-preview", t("بازبینی اقدام", "Review action"))}
+    ${plan ? `<div id="draft-action" class="controls">${plan.action === "browser.open"
+      ? `<a class="outline" href="${safe(plan.url)}" target="_blank" rel="noopener noreferrer">${t("باز کردن", "Open")} · <bdi>${safe(plan.url)}</bdi></a>`
+      : `<bdi>${safe(plan.label)}${plan.target ? " · " + safe(plan.target) : ""}</bdi>${button("intent-confirm", t("تأیید و اجرا", "Confirm and run"))}`}
+      ${button("intent-cancel", t("لغو اقدام", "Cancel action"))}</div>` : ""}</div>`;
+}
 function home() {
   const connected = !review && session?.chatAvailable;
   return `<div class="studio"><section class="greeting">${emblem()}<h1>${t("از کجا شروع کنیم؟", "Where shall we begin?")}</h1><div class="starters">${Object.entries(
@@ -236,6 +247,7 @@ function home() {
  <form id="conversation" class="composer glass"><textarea id="draft" maxlength="4000" aria-label="${t("پیام", "Message")}" placeholder="${t("برای جارویس شادوِرس بنویسید…", "Write your message…")}">${safe(draft)}</textarea>
  ${connected && selectedMemory ? `<div class="controls selected-memory"><bdi>${t("یادداشت همراه این پیام به مدل تنظیم‌شده ارسال می‌شود", "Note sent to the configured model with this message")} · ${safe(selectedMemory.text)}</bdi>${button("memory-unselect", t("برداشتن یادداشت", "Remove selected note"))}</div>` : ""}
  ${connected && !selectedMemory ? memoryComposer() : ""}
+ ${actionComposer()}
  <div id="attachments">${files.map((f, i) => `<span class="chip"><bdi>${safe(f.name)}</bdi>${button("remove-" + i, icon("close"), "remove")}</span>`).join("")}</div>
  <div class="tools">${button("attach", icon("attach"), "iconbtn")}<input type="file" multiple id="file" hidden>${button("save-draft", icon("layers") + t("ذخیرهٔ پیش‌نویس", "Save draft"), "textbtn")}
  ${button("voice", icon("wave") + label("voice"), "voicebtn")}<button type="submit" class="primary send" ${connected && !sending ? "" : "disabled"} aria-label="${t("ارسال", "Send")}">${icon("send")}</button></div></form>
@@ -613,6 +625,8 @@ function errorText(code) {
     task_missing: t("این وظیفه در پروژه پیدا نشد.", "This task was not found in the project."),
     task_invalid: t("عنوان معتبر وظیفه را وارد کنید.", "Enter a valid task title."),
     task_cap: t("حداکثر ۱۰۰ وظیفه در هر پروژه مجاز است.", "Each project can hold up to 100 tasks."),
+    intent_invalid: t("درخواست پشتیبانی‌شده بنویسید؛ مانند «ساخت پروژه نمونه»، «ساخت وظیفه گزارش» یا «باز کردن سایت https://example.org».", "Try ‘create project Example’, ‘add task Report’, or ‘open website https://example.org’."),
+    intent_missing: t("مهلت اقدام پایان یافته است؛ دوباره بازبینی کنید.", "The action expired. Review it again."),
     project_invalid: t("نام معتبر پروژه را وارد کنید.", "Enter a valid project name."),
     project_cap: t("حداکثر ۵۰ پروژه مجاز است.", "You can save up to 50 projects."),
     file_cap: t("به سقف ذخیره‌سازی فایل رسیده‌اید.", "Your file storage limit has been reached."),
@@ -1000,6 +1014,46 @@ app.addEventListener("click", async (event) => {
   }
   if (page === "vision" && action.startsWith("vision-")) {
     await vision.handle(action.slice(7));
+    return;
+  }
+  if (page === "main" && session && !review && action.startsWith("intent-")) {
+    const operation = action.slice(7);
+    const requester = session;
+    const prompt = draft.trim();
+    const plan = actionPlan;
+    if (operation !== "preview" && plan?.prompt !== prompt) return;
+    control.disabled = true;
+    try {
+      let result;
+      if (operation === "preview") {
+        actionPlan = null;
+        result = await api("actions", { action: "intent.preview", input: { message: prompt, projectId: memoryScope() } });
+      } else if (plan.id) {
+        result = await api("actions", { action: "intent." + operation, input: { id: plan.id } });
+      }
+      if (session !== requester || page !== "main") return;
+      if (operation === "preview") {
+        if (draft.trim() === prompt) actionPlan = { ...result.plan, prompt };
+      } else {
+        actionPlan = null;
+        if (result?.projects) {
+          projects = result.projects.map(({ name }) => name);
+          projectIds = new Map(result.projects.map(({ id, name }) => [name, id]));
+          activeProject = result.project.name;
+        }
+        if (operation === "confirm" && result?.status === "completed") {
+          if (draft.trim() === prompt) draft = "";
+          chatFeedback = t("اقدام انجام شد.", "Action completed.");
+        }
+      }
+    } catch (error) {
+      if (session !== requester) return;
+      if (error.message === "auth") returnToGate();
+      else chatFeedback = errorText(error.message);
+    } finally {
+      if (control.isConnected) control.disabled = false;
+    }
+    if (session === requester && page === "main") render();
     return;
   }
   if (action === "conversation-history") {
@@ -1415,6 +1469,12 @@ app.addEventListener("click", async (event) => {
 app.addEventListener("input", (event) => {
   if (event.target.id === "draft") {
     draft = event.target.value;
+    if (actionPlan) {
+      const old = actionPlan;
+      actionPlan = null;
+      app.querySelector("#draft-action")?.remove();
+      if (old.id) void api("actions", { action: "intent.cancel", input: { id: old.id } }).catch(() => {});
+    }
     if (rankedMemory) {
       rankedMemory = null;
       app.querySelector("#ranked-context")?.remove();
