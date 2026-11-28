@@ -6,6 +6,7 @@ import { Signal } from "./identity/audio.js";
 import { mountHead } from "./identity/head.js";
 import { localPersianVoice, recognizePersian, speakPersian } from "./identity/persian-speech.js";
 import { mountScope } from "./instruments.js";
+import { createDevicesUI } from "./devices.js";
 import { createResearchUI } from "./research.js";
 import { createVisionUI } from "./vision.js";
 const app = document.querySelector("#app");
@@ -98,6 +99,7 @@ function clearWorkspace() {
   taskView = null;
   dueReminders = [];
   connectorState = null;
+  deviceUI.clear();
   connectorBusy = false;
   activeProject = "";
   notes = [];
@@ -166,6 +168,10 @@ const language = () =>
   `<button class="outline lang" data-action="lang">${icon("globe")}${t("EN", "فارسی")}</button>`;
 const button = (action, body, cls = "outline", disabled = false) =>
   `<button type="button" class="${cls}" data-action="${action}"${disabled ? " disabled" : ""}>${body}</button>`;
+const deviceUI = createDevicesUI({
+  root: app, api, render, t, safe, button, onAuth: returnToGate,
+  active: () => page, user: () => review ? null : session, show: (message) => { feedback = message; },
+});
 const research = createResearchUI({
   root: app, api, render, t, safe, button, onAuth: returnToGate,
   active: () => page === "research" && !review && session?.role === "creator",
@@ -553,7 +559,7 @@ function monitor() {
     title("monitor") +
     `<section class="surface stack"><h2>${t("زمان هر فریم مرورگر", "Browser frame interval")}</h2><p class="sub">${t("اندازه‌گیری زنده در همین زبانه", "Live measurements from this tab")}</p>
  <div class="instrument" id="scope"><div class="split"><output dir="auto">—</output><button class="outline" type="button" aria-pressed="false">${t("مکث", "Pause")}</button></div><canvas tabindex="0" aria-label="${t("نمودار زمان فریم؛ برای مرور از کلیدهای جهت استفاده کنید.", "Frame interval chart. Inspect with arrow keys.")}"></canvas><dl class="trace-stats"><div><dt>${t("میانه", "Median")}</dt><dd data-stat="median">—</dd></div><div><dt>${t("بیشینه", "Peak")}</dt><dd data-stat="peak">—</dd></div><div><dt>${t("بازهٔ ثبت", "Window")}</dt><dd data-stat="window">—</dd></div></dl><p class="trace-detail"></p></div>
- <div class="readouts">${cards.map(([k, v]) => `<div><span>${k}</span><bdi>${safe(v)}</bdi></div>`).join("")}</div></section>` + workspaceConnector()
+ <div class="readouts">${cards.map(([k, v]) => `<div><span>${k}</span><bdi>${safe(v)}</bdi></div>`).join("")}</div></section>` + workspaceConnector() + deviceUI.view()
   );
 }
 function plans() {
@@ -579,7 +585,7 @@ function admin() {
   return (
     title("admin") +
     `<div class="surface stack"><h2>${t("کاربران", "Users")}</h2>${users ? users.map((u) => `<div class="auditrow split"><bdi>${safe(u.name)}</bdi><span>${u.role === "creator" ? t("سازنده", "Creator") : t("عضو", "Member")}</span></div>`).join("") : `<p class="sub">${t("فهرست حساب‌ها فقط در نشست سازنده در دسترس است.", "The account list requires a Creator session.")}</p>`}
- ${models}<h2>${t("کنترل‌های برنامه‌ریزی‌شده", "Planned controls")}</h2><p class="sub">${t("مدیریت اشتراک و مدل‌ها، گزارش هزینه، صدور کد، ثبت رویدادها و توقف اضطراری.", "Subscription and model management, cost reporting, code issuance, audit and emergency stop.")}</p></div>`
+ ${models}<h2>${t("کنترل‌های برنامه‌ریزی‌شده", "Planned controls")}</h2><p class="sub">${t("مدیریت اشتراک و مدل‌ها، گزارش هزینه، صدور کد، ثبت رویدادها و توقف اضطراری.", "Subscription and model management, cost reporting, code issuance, audit and emergency stop.")}</p></div>` + deviceUI.admin()
   );
 }
 function shell() {
@@ -593,6 +599,7 @@ function shell() {
  <footer class="footnote"><span class="en">SHADVERSE ©</span>${attribution()}</footer></main></div>`;
 }
 function render() {
+  if (page !== "monitor" && app.querySelector("[data-action=device-refresh]")) deviceUI.clear();
   if (page !== "vision" && app.querySelector("[data-vision-state]")) vision.close();
   if (page !== "research" && app.querySelector("#research-title")) research.close();
   const old = app.querySelector(".portrait");
@@ -1070,6 +1077,10 @@ app.addEventListener("click", async (event) => {
   if (!control) return;
   const action = control.dataset.action;
   feedback = "";
+  if (session && !review && action.startsWith("device-")) {
+    await deviceUI.handle(action.slice(7), control);
+    return;
+  }
   if (page === "research" && action.startsWith("research-")) {
     await research.handle(action.slice(9));
     return;

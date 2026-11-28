@@ -16,6 +16,7 @@ import {
   sessionAge,
 } from "./auth.mjs";
 import { openConversations } from "./conversations.mjs";
+import { loadDeviceInventory, openDeviceGrants } from "./devices.mjs";
 import { analyzeDocument, documentKind, plainFormats, readDocument } from "./document-analysis.mjs";
 import { loadDocumentProcessor } from "./document-processing.mjs";
 import { documentBodyLimit, openDocuments } from "./documents.mjs";
@@ -52,6 +53,14 @@ const vision = await openVision(db, gateway, port).catch(() => {
   console.error("Restricted vision admission is invalid. Vision dispatch is disabled.");
   return null;
 });
+const devices = openDeviceGrants(
+  db,
+  await loadDeviceInventory(process.env, gateway?.port).catch(() => {
+    console.error("Invalid device inventory profile.");
+    return null;
+  }),
+);
+const deviceAdmin = process.env.JARVIS_DEVICES_ADMIN?.toLowerCase() ?? gateway?.creator;
 const research = await openResearch(gateway, port).catch(() => {
   console.error("Restricted research admission is invalid. Research dispatch is disabled.");
   return null;
@@ -67,6 +76,7 @@ const sessionInfo = (user) => ({
   chatAvailable: canChat(user),
   vision: canChat(user) ? (vision?.limits ?? null) : null,
   research: canChat(user) && Boolean(research),
+  deviceAdmin: user.role === "creator" && user.name.toLowerCase() === deviceAdmin,
 });
 const root = fileURLToPath(new URL("./dist/", import.meta.url));
 const types = {
@@ -178,6 +188,16 @@ createServer(async (req, res) => {
           return json(400, { error: "invalid" });
         return json(200, conversations.page(session.userId, before));
       }
+      if (path === "/api/devices") {
+        if (rateLimit(db, "devices/" + session.userId, 60)) return json(429, { error: "limit" });
+        const { status, ...body } = await devices.inventory(
+          session.userId,
+          url.searchParams.get("id"),
+          () => getSession(db, req.headers.cookie)?.id === session.id,
+        );
+        if (!res.destroyed) return json(status, body);
+        return;
+      }
       if (path === "/api/workflows") return json(200, workflows.snapshot(session.userId));
       if (path === "/api/integrations") return json(200, integrations.list(session.userId));
       if (path === "/api/actions") {
@@ -283,6 +303,7 @@ createServer(async (req, res) => {
     const manageDocuments = path === "/api/documents";
     const executeAction = path === "/api/actions";
     const manageWorkflows = path === "/api/workflows";
+    const manageDevices = path === "/api/devices";
     const manageIntegrations = path === "/api/integrations";
     if (
       chat ||
@@ -294,6 +315,7 @@ createServer(async (req, res) => {
       manageDocuments ||
       executeAction ||
       manageWorkflows ||
+      manageDevices ||
       manageIntegrations ||
       path === "/api/logout"
     ) {
@@ -387,6 +409,14 @@ createServer(async (req, res) => {
     if (manageIntegrations) {
       const result = integrations.execute(session.userId, body);
       return json(result.error === "integration_scope" ? 403 : result.error ? 400 : 200, result);
+    }
+    if (manageDevices) {
+      const { status, ...result } = await devices.change(
+        session,
+        body,
+        sessionInfo(session).deviceAdmin,
+      );
+      return json(status, result);
     }
     if (manageWorkflows) {
       const result = workflows.change(session.userId, body);

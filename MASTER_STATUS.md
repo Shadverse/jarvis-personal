@@ -2,7 +2,7 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Functional completion · Local workflows and scoped integration
+**Active milestone** Functional completion · Device inventory and Creator Bootstrap
 
 **Verified remote baseline for live integration** `320c5619f2cfa1510453bf362f17d3e31487f5d7`
 
@@ -39,7 +39,7 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | G | Existing private OpenClaw tool and paired-device access | PARTIALLY IMPLEMENTED | The upstream operator path is separate. There is no product permission layer for application launching, files, browser actions, commands, desktop companion, mobile actions or external tools. |
 | G | Account-scoped project creation and listing | VERIFIED LOCAL | Workspace registers one explicit local action. Isolation, limits, CSRF and idempotent creation passed the HTTP fixture. |
 | G–I | Private project tasks | VERIFIED LOCAL | The API fixture checked explicit creation, completion and reopening, with project and account isolation. |
-| G–I | Device execution and Windows pairing | PENDING IMPLEMENTATION | Local action review exists. A scoped device adapter and approved paired runtime remain pending. |
+| G–I | Device inventory | VERIFIED LOCAL · PAIRED RUNTIME DEFERRED | Read-only OpenClaw list and detail adapter, exclusive per-account assignment, separate consent, expiry and in-flight revocation. Device actions and Windows pairing remain open. |
 | H | Local Workspace connector grants | VERIFIED LOCAL | One read-only account-scoped connector has a 15-minute grant, explicit revocation, and usage count. The fixture checked denial of unapproved scopes and connectors. |
 | H | Email, calendar, web search, GitHub, cloud storage, messaging, APIs and MCP integrations | DISABLED | Catalog entries are unavailable. Official provider authorization, external adapters and credentials are pending. |
 | I | Private task reminders | VERIFIED LOCAL | One cancellable deadline per task with persistent acknowledgement. A repeated acknowledgement preserves its timestamp; rescheduling resets it. The local API fixture verified account isolation and stale-deadline rejection. |
@@ -188,4 +188,9 @@ Authenticated users can ask the composer to review a bounded Persian or English 
 
 Workspace → Projects can schedule an owned project's task summary once, or every 24 hours from the selected start time. The in-process scheduler checks at startup and periodically. Read and publication share a SQLite transaction. Overdue recurring schedules catch up once after a restart and resume their original cadence. The account can pause pending work, cancel a schedule, or clear completed history. Each job retains its latest local result. Optional summary notices and explicit task follow-ups enter an account-scoped inbox. Completing a task suppresses its next reminder and closes the job. Publication is unique per scheduled run; repeat acknowledgements preserve the original timestamp. Keep the latest 100 notices per account, with explicit clearing of acknowledged items. Restart tests verified account isolation, pause and resume, cancellation, suppression and duplicate-free publication. No external action, inference or notification delivery is scheduled.
 
-**Continuation.** Implement the read-only OpenClaw node inventory route using the documented `node.list` and `node.describe` RPCs. Filter results to explicitly granted device IDs per account and fixture-test cross-account denial and immediate revocation before any `node.invoke` work. Do not activate Windows pairing during the deferred phase. Creative media providers, external connectors, skills activation, full administration and commercial isolation remain open. Staging, physical devices and provider acceptance remain deferred.
+**Continuation.** Device inventory is implemented. Next build the private Creator Bootstrap realm and keep paired runtime and tool invocation deferred. Creative media providers, external connectors, skills activation, full administration and commercial isolation remain open. Staging, physical devices and provider acceptance remain deferred.
+
+
+## Read-only device inventory checkpoint
+
+Monitor & tools projects status from the dedicated OpenClaw inventory profile only after the configured Creator offers an exclusive per-device grant and the target account accepts it. Local fixtures verified exact CLI calls, absence of inherited credentials, isolation, expiry and revocation during a pending read. Windows and physical pairing remain deferred.

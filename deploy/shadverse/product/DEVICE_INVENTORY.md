@@ -1,0 +1,9 @@
+# Read-only device inventory
+
+The product adapter is inactive without an approved local inventory profile. It calls the installed OpenClaw CLI with fixed `gateway call node.list` and `gateway call node.describe --params '{"nodeId":"…"}'` requests. No device command or pairing operation is reachable through the adapter.
+
+Use a dedicated OpenClaw state directory and loopback Gateway, separate from the Creator chat Gateway, with token auth and OpenResponses disabled. The service profile should have only the necessary inventory access. Before authorized release-candidate testing, verify the profile's effective role and node visibility. Configure the absolute trusted executable with `JARVIS_DEVICES_OPENCLAW`, the owner-only profile directory with `JARVIS_DEVICES_STATE`, its port with `JARVIS_DEVICES_PORT`, and the Creator account name with `JARVIS_DEVICES_ADMIN` (defaults to the configured primary chat Creator). The adapter reads the private profile's `openclaw.json` and checks local mode, loopback, port, token auth and disabled OpenResponses. Credentials stay in the dedicated profile and are excluded from CLI arguments and browser responses.
+
+The configured Creator offers a known node ID to one existing account for 1–30 days. The receiving account must accept the offer in Monitor & tools before either status RPC can reveal metadata. Only a paired node matching the exact account grant is projected, with its local label, connection state, platform and version. Re-issuing needs fresh consent. Either party can revoke the grant. Expiry, revocation, and sign-out are rechecked before returning a response. Product revocation does not unpair the upstream device.
+
+Use synthetic node fixtures locally. Physical pairing, actual role and visibility verification, Windows behavior and device invocation remain deferred.
