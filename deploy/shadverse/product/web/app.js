@@ -21,6 +21,7 @@ let tab = "history",
   files = [],
   demoState = "idle",
   users = null,
+  modelRegistry = null,
   micState = "";
 const t = (fa, en) => (lang === "fa" ? fa : en);
 const safe = (value) =>
@@ -287,10 +288,24 @@ function plans() {
   );
 }
 function admin() {
+  const health = {
+    unknown: t("بررسی‌نشده", "Unchecked"),
+    healthy: t("سالم", "Healthy"),
+    no_model: t("مدل تأییدشده‌ای برای این درخواست در دسترس نیست.", "No approved model is available for this request."),
+    token_budget: t("سهمیهٔ توکن امروز برای این درخواست کافی نیست.", "Today's token budget is insufficient for this request."),
+    busy: t("در حال پاسخ", "Busy"),
+    cooldown: t("وقفهٔ موقت", "Cooling down"),
+    retryable: t("آمادهٔ بررسی دوباره", "Ready to retry"),
+  };
+  const models = !modelRegistry?.routes ? "" : `<h2>${t("مدیریت مدل‌ها", "Model management")}</h2>
+    <p class="sub">${t("سهمیهٔ مصرف امروز", "Token budget used today")} <bdi>${modelRegistry.usage.chargedTokens} / ${modelRegistry.dailyTokens}</bdi></p>
+    ${modelRegistry.routes.map((route) => `<div class="auditrow split"><bdi>${safe(route.model)}</bdi>
+      <span>${route.eligible ? (route.paused ? t("متوقف", "Paused") : health[route.health]) : t("در انتظار تأیید", "Approval pending")}</span>
+      ${route.eligible ? button("model-" + (route.paused ? "resume-" : "pause-") + route.id, route.paused ? t("ازسرگیری", "Resume") : t("توقف", "Pause")) : ""}</div>`).join("")}`;
   return (
     title("admin") +
     `<div class="surface stack"><h2>${t("کاربران", "Users")}</h2>${users ? users.map((u) => `<div class="auditrow split"><bdi>${safe(u.name)}</bdi><span>${u.role === "creator" ? t("سازنده", "Creator") : t("عضو", "Member")}</span></div>`).join("") : `<p class="sub">${t("فهرست حساب‌ها فقط در نشست سازنده در دسترس است.", "The account list requires a Creator session.")}</p>`}
- <h2>${t("کنترل‌های برنامه‌ریزی‌شده", "Planned controls")}</h2><p class="sub">${t("مدیریت اشتراک و مدل‌ها، گزارش هزینه، صدور کد، ثبت رویدادها و توقف اضطراری.", "Subscription and model management, cost reporting, code issuance, audit and emergency stop.")}</p></div>`
+ ${models}<h2>${t("کنترل‌های برنامه‌ریزی‌شده", "Planned controls")}</h2><p class="sub">${t("مدیریت اشتراک و مدل‌ها، گزارش هزینه، صدور کد، ثبت رویدادها و توقف اضطراری.", "Subscription and model management, cost reporting, code issuance, audit and emergency stop.")}</p></div>`
   );
 }
 function shell() {
@@ -465,6 +480,19 @@ app.addEventListener("click", async (event) => {
   if (!control) return;
   const action = control.dataset.action;
   feedback = "";
+  const modelAction = /^model-(pause|resume)-([a-z0-9-]+)$/.exec(action);
+  if (modelAction && page === "admin" && session?.chatAvailable) {
+    const requester = session;
+    control.disabled = true;
+    try {
+      const registry = await api("models", { id: modelAction[2], paused: modelAction[1] === "pause" });
+      if (page === "admin" && session === requester) modelRegistry = registry;
+    } catch (err) {
+      if (page === "admin" && session === requester) feedback = errorText(err.message);
+    }
+    if (page === "admin" && session === requester) render();
+    return;
+  }
   if (action === "reveal") {
     const input = app.querySelector("[name=password]");
     reveal = !reveal;
@@ -610,12 +638,17 @@ app.addEventListener("click", async (event) => {
     page = action;
     drawer = false;
     users = null;
+    modelRegistry = null;
     if (page === "admin" && !review) {
       try {
         const requester = session;
-        const result = await api("admin");
+        const [result, registry] = await Promise.all([
+          api("admin"),
+          requester.chatAvailable ? api("models") : null,
+        ]);
         if (page !== "admin" || session !== requester) return;
         users = result.users;
+        modelRegistry = registry;
       } catch (err) {
         users = null;
         feedback = errorText(err.message);

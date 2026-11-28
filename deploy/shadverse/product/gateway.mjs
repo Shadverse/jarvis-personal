@@ -30,7 +30,7 @@ export async function loadGateway(env = process.env) {
   }
 }
 
-export async function postResponses(port, payload, token, timeout) {
+export async function postResponses(port, payload, token, timeout, modelOverride) {
   const body = Buffer.from(JSON.stringify(payload));
   return new Promise((resolve, reject) => {
     // A fresh direct loopback connection keeps the owner credential off environment proxies.
@@ -44,6 +44,7 @@ export async function postResponses(port, payload, token, timeout) {
         signal: AbortSignal.timeout(timeout),
         headers: {
           ...(token ? { Authorization: "Bearer " + token } : {}),
+          ...(modelOverride ? { "x-openclaw-model": modelOverride } : {}),
           "Content-Type": "application/json",
           "Content-Length": body.length,
         },

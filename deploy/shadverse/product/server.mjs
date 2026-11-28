@@ -13,6 +13,7 @@ import {
   sessionAge,
 } from "./auth.mjs";
 import { loadGateway, postResponses, readGatewayJson } from "./gateway.mjs";
+import { createModelRegistry, loadModelPolicy, readUsage } from "./models.mjs";
 process.umask(0o077);
 const db = openStore(process.env.JARVIS_STATE);
 const port = Number(process.env.PORT || 3000);
@@ -25,6 +26,8 @@ if (
   throw Error("Use HTTPS for an external application origin.");
 const localReview = ["localhost", "127.0.0.1"].includes(origin.hostname);
 const gateway = await loadGateway();
+const modelPolicy = await loadModelPolicy();
+const models = modelPolicy && createModelRegistry(db, modelPolicy);
 const canChat = (user) =>
   Boolean(gateway && user.role === "creator" && user.name.toLowerCase() === gateway.creator);
 const sessionInfo = (user) => ({
@@ -88,6 +91,10 @@ createServer(async (req, res) => {
     if (req.method === "GET") {
       if (!session) return json(401, { error: "auth" });
       if (path === "/api/session") return json(200, sessionInfo(session));
+      if (path === "/api/models") {
+        if (!canChat(session)) return json(403, { error: "forbidden" });
+        return json(200, models?.inspect() ?? { status: "unconfigured" });
+      }
       if (path === "/api/admin") {
         if (session.role !== "creator") return json(403, { error: "forbidden" });
         return json(200, { users: db.prepare("SELECT name,role FROM users ORDER BY name").all() });
@@ -98,13 +105,14 @@ createServer(async (req, res) => {
     if (req.headers.origin !== origin.origin || req.headers["content-type"] !== "application/json")
       return json(403, { error: "origin" });
     const chat = path === "/api/chat";
-    if (chat || path === "/api/logout") {
+    const manageModels = path === "/api/models";
+    if (chat || manageModels || path === "/api/logout") {
       if (!session) {
-        if (!chat) res.setHeader("Set-Cookie", cookie("", 0));
+        if (path === "/api/logout") res.setHeader("Set-Cookie", cookie("", 0));
         return json(401, { error: "auth" });
       }
       if (req.headers["x-csrf-token"] !== session.csrf) return json(403, { error: "csrf" });
-      if (!chat) {
+      if (path === "/api/logout") {
         db.prepare("DELETE FROM sessions WHERE id=?").run(session.id);
         res.setHeader("Set-Cookie", cookie("", 0));
         return json(200, { ok: true });
@@ -129,42 +137,73 @@ createServer(async (req, res) => {
     } catch {
       return json(400, { error: "invalid" });
     }
+    if (manageModels) {
+      if (!models) return json(409, { error: "no_model" });
+      if (!models.setPaused(body?.id, body?.paused)) return json(400, { error: "invalid" });
+      return json(200, models.inspect());
+    }
     if (chat) {
       const message = typeof body?.message === "string" ? body.message.trim() : "";
       if (!message || message.length > 4000) return json(400, { error: "message" });
       if (chatPending) return json(429, { error: "busy" });
       chatPending = true;
       try {
-        const upstream = await postResponses(
-          gateway.port,
-          {
-            model: "openclaw:main",
-            user: "shadverse-creator:" + gateway.creator,
-            input: message,
-            max_output_tokens: 2048,
-          },
-          gateway.token,
-          120_000,
-        );
-        if (upstream.statusCode !== 200) {
-          upstream.destroy();
-          return json(upstream.statusCode === 409 ? 409 : 502, {
-            error: upstream.statusCode === 409 ? "archived" : "gateway",
-          });
+        const exclude = new Set();
+        for (let retry = 0; retry < (models ? 2 : 1); retry++) {
+          const attempt = models?.reserve(message, exclude);
+          if (attempt?.error) {
+            return json(attempt.error === "token_budget" ? 429 : 503, { error: attempt.error });
+          }
+          const upstream = await postResponses(
+            gateway.port,
+            {
+              model: "openclaw:main",
+              user: "shadverse-creator:" + gateway.creator,
+              input: message,
+              max_output_tokens: attempt?.route.maxOutputTokens ?? 2048,
+            },
+            gateway.token,
+            120_000,
+            attempt?.route.model,
+          ).catch(() => null);
+          if (!upstream) {
+            if (attempt) models.finish(attempt, "uncertain", null);
+            return json(502, { error: "gateway" });
+          }
+          if (upstream.statusCode !== 200) {
+            if (attempt && upstream.statusCode === 400) {
+              const error = await readGatewayJson(upstream, 4096).catch(() => null);
+              // The Gateway rejects this exact model-visibility error before running the agent.
+              const notAdmitted =
+                error?.error?.type === "invalid_request_error" &&
+                error.error.message ===
+                  `Model '${attempt.route.model}' is not allowed for agent 'main'.`;
+              models.finish(attempt, notAdmitted ? "rejected" : "uncertain", null);
+              if (notAdmitted && retry === 0) {
+                exclude.add(attempt.route.model);
+                continue;
+              }
+            } else {
+              upstream.destroy();
+              if (attempt) models.finish(attempt, "uncertain", null);
+            }
+            return json(upstream.statusCode === 409 ? 409 : 502, {
+              error: upstream.statusCode === 409 ? "archived" : "gateway",
+            });
+          }
+          const result = await readGatewayJson(upstream, 256 * 1024).catch(() => null);
+          const usage = readUsage(result?.usage);
+          const reply = (Array.isArray(result?.output) ? result.output : [])
+            .filter((item) => item.type === "message" && item.role === "assistant")
+            .flatMap((item) => item.content ?? [])
+            .filter((part) => part.type === "output_text" && typeof part.text === "string")
+            .map((part) => part.text)
+            .join("\n")
+            .trim();
+          const ok = result?.status === "completed" && reply && !reply.includes(gateway.token);
+          if (attempt) models.finish(attempt, ok ? "completed" : "uncertain", usage);
+          return ok ? json(200, { reply }) : json(502, { error: "gateway" });
         }
-        const result = await readGatewayJson(upstream, 256 * 1024);
-        const reply = (result.output ?? [])
-          .filter((item) => item.type === "message" && item.role === "assistant")
-          .flatMap((item) => item.content ?? [])
-          .filter((part) => part.type === "output_text" && typeof part.text === "string")
-          .map((part) => part.text)
-          .join("\n")
-          .trim();
-        if (result.status !== "completed" || !reply || reply.includes(gateway.token))
-          return json(502, { error: "gateway" });
-        return json(200, { reply });
-      } catch {
-        return json(502, { error: "gateway" });
       } finally {
         chatPending = false;
       }
