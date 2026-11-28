@@ -188,9 +188,16 @@ Authenticated users can ask the composer to review a bounded Persian or English 
 
 Workspace → Projects can schedule an owned project's task summary once, or every 24 hours from the selected start time. The in-process scheduler checks at startup and periodically. Read and publication share a SQLite transaction. Overdue recurring schedules catch up once after a restart and resume their original cadence. The account can pause pending work, cancel a schedule, or clear completed history. Each job retains its latest local result. Optional summary notices and explicit task follow-ups enter an account-scoped inbox. Completing a task suppresses its next reminder and closes the job. Publication is unique per scheduled run; repeat acknowledgements preserve the original timestamp. Keep the latest 100 notices per account, with explicit clearing of acknowledged items. Restart tests verified account isolation, pause and resume, cancellation, suppression and duplicate-free publication. No external action, inference or notification delivery is scheduled.
 
-**Continuation.** Device inventory is implemented. Next build the private Creator Bootstrap realm and keep paired runtime and tool invocation deferred. Creative media providers, external connectors, skills activation, full administration and commercial isolation remain open. Staging, physical devices and provider acceptance remain deferred.
+**Continuation.** Device inventory is implemented. The private Creator Bootstrap realm is implemented. Paired runtime and tool invocation remain deferred. Creative media providers, external connectors, skills activation, full administration and commercial isolation remain open. Staging, physical devices and provider acceptance remain deferred.
 
 
 ## Read-only device inventory checkpoint
 
 Monitor & tools projects status from the dedicated OpenClaw inventory profile only after the configured Creator offers an exclusive per-device grant and the target account accepts it. Local fixtures verified exact CLI calls, absence of inherited credentials, isolation, expiry and revocation during a pending read. Windows and physical pairing remain deferred.
+
+
+## Creator Bootstrap checkpoint
+
+The private Creator realm supports a versioned schema and authenticated import/export with revision conflict checks. It starts empty. Project relationships map organizational records to owned Workspace projects. Ranked Composer previews can opt into scoped records and reject stale revisions. Fixed identity instructions mark the authenticated Creator as the authorized primary user without inventing personal facts. Synthetic HTTP integration covered account isolation, project mapping, secret rejection, export, preview-only behavior and exact dispatch.
+
+**Continuation.** Stream text through the existing OpenResponses SSE path and add safe cancellation and latency measurement. Provider and physical speech acceptance remain deferred.

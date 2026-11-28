@@ -6,6 +6,7 @@ import { Signal } from "./identity/audio.js";
 import { mountHead } from "./identity/head.js";
 import { localPersianVoice, recognizePersian, speakPersian } from "./identity/persian-speech.js";
 import { mountScope } from "./instruments.js";
+import { createBootstrapUI } from "./bootstrap.js";
 import { createDevicesUI } from "./devices.js";
 import { createResearchUI } from "./research.js";
 import { createVisionUI } from "./vision.js";
@@ -62,6 +63,7 @@ let projects = [],
   selectedMemory = null,
   rankedMemory = null,
   includeEarlierQuestions = false,
+  includeBootstrap = false,
   actionPlan = null,
   workflowState = null,
   workflowTask = null,
@@ -108,6 +110,8 @@ function clearWorkspace() {
   selectedMemory = null;
   rankedMemory = null;
   includeEarlierQuestions = false;
+  includeBootstrap = false;
+  bootstrapUI.clear();
   actionPlan = null;
   workflowState = null;
   workflowTask = null;
@@ -168,6 +172,10 @@ const language = () =>
   `<button class="outline lang" data-action="lang">${icon("globe")}${t("EN", "فارسی")}</button>`;
 const button = (action, body, cls = "outline", disabled = false) =>
   `<button type="button" class="${cls}" data-action="${action}"${disabled ? " disabled" : ""}>${body}</button>`;
+const bootstrapUI = createBootstrapUI({
+  root: app, api, render, t, safe, button, onAuth: returnToGate,
+  active: () => page === "admin", user: () => review ? null : session, show: (message) => { feedback = message; },
+});
 const deviceUI = createDevicesUI({
   root: app, api, render, t, safe, button, onAuth: returnToGate,
   active: () => page, user: () => review ? null : session, show: (message) => { feedback = message; },
@@ -221,6 +229,7 @@ const memoryKinds = () => ({
   preference: t("ترجیح", "Preference"),
   knowledge: t("دانسته", "Knowledge"),
   conversation: t("پرسش قبلی", "Earlier question"),
+  organization: t("دانش سازمانی سازنده", "Creator organizational knowledge"),
 });
 function memoryComposer() {
   const preview = rankedMemory?.message === draft.trim() &&
@@ -230,6 +239,8 @@ function memoryComposer() {
     <bdi>${t("دامنه", "Scope")} · ${safe(activeProject || t("شخصی", "Personal"))}</bdi>
     <label><input id="memory-earlier" type="checkbox" ${includeEarlierQuestions ? "checked" : ""}>
       ${t("پرسش‌های قبلی هم جست‌وجو شوند", "Also search earlier questions")}</label>
+    ${session?.bootstrap ? `<label><input id="memory-bootstrap" type="checkbox" ${includeBootstrap ? "checked" : ""}>
+      ${t("جست‌وجو در بستهٔ سازنده", "Search Creator Bootstrap")}</label>` : ""}
     </div>${preview?.length ? `<div id="ranked-context">${button("memory-unrank", t("برداشتن زمینه", "Remove context"))}
       <ul>${preview.map(({ kind, text }) => `<li><bdi>${memoryKinds()[kind]} · ${safe(text)}</bdi></li>`).join("")}</ul>
       <p class="sub">${t("با ارسال پیام، موارد بالا به مدل فرستاده می‌شوند.", "Sending shares the items above with the configured model.")}</p></div>` : ""}`;
@@ -517,7 +528,7 @@ function space() {
  <div class="controls"><label class="field">${icon("search")}<input type="search" id="search" aria-label="${t("جست‌وجو", "Search")}" value="${safe(query)}" placeholder="${t("جست‌وجو", "Search")}"></label>
  <select id="project-filter" aria-label="${t("پروژهٔ انتخابی", "Active project")}"><option value="">${t("همهٔ پروژه‌ها", "All projects")}</option>${projects.map((n) => `<option ${n === activeProject ? "selected" : ""}>${safe(n)}</option>`).join("")}</select></div>
  ${add ? `<div class="controls"><label class="field"><input id="item-name" dir="auto" maxlength="${privateProjects() ? 120 : 500}" value="${safe(editing?.text ?? "")}" placeholder="${tab === "projects" ? t("نام پروژه", "Project name") : t("یادداشت حافظه", "Memory note")}" aria-label="${label(tab)}"></label>${button("add-item", icon("layers") + (editing ? t("ذخیره", "Save") : t("افزودن", "Add")))}
- ${workspaceMemory() ? `<label>${t("نوع", "Type")} <select id="memory-kind">${Object.entries(memoryKinds()).filter(([kind]) => kind !== "conversation").map(([kind, name]) => `<option value="${kind}" ${editing?.kind === kind ? "selected" : ""}>${name}</option>`).join("")}</select></label>
+ ${workspaceMemory() ? `<label>${t("نوع", "Type")} <select id="memory-kind">${Object.entries(memoryKinds()).filter(([kind]) => !["conversation", "organization"].includes(kind)).map(([kind, name]) => `<option value="${kind}" ${editing?.kind === kind ? "selected" : ""}>${name}</option>`).join("")}</select></label>
    <label><input id="memory-eligible" type="checkbox" ${editing?.contextAllowed ? "checked" : ""}> ${t("مجاز برای جست‌وجوی حافظه", "Allow relevant retrieval")}</label>` : ""}
  ${editing ? button("memory-cancel", t("انصراف", "Cancel"), "outline") : ""}
  ${workspaceMemory() ? `<a href="/api/${safe(memoryPath(memoryScope(), true))}" class="outline">${t("خروجی حافظه", "Export memory")}</a>
@@ -585,7 +596,7 @@ function admin() {
   return (
     title("admin") +
     `<div class="surface stack"><h2>${t("کاربران", "Users")}</h2>${users ? users.map((u) => `<div class="auditrow split"><bdi>${safe(u.name)}</bdi><span>${u.role === "creator" ? t("سازنده", "Creator") : t("عضو", "Member")}</span></div>`).join("") : `<p class="sub">${t("فهرست حساب‌ها فقط در نشست سازنده در دسترس است.", "The account list requires a Creator session.")}</p>`}
- ${models}<h2>${t("کنترل‌های برنامه‌ریزی‌شده", "Planned controls")}</h2><p class="sub">${t("مدیریت اشتراک و مدل‌ها، گزارش هزینه، صدور کد، ثبت رویدادها و توقف اضطراری.", "Subscription and model management, cost reporting, code issuance, audit and emergency stop.")}</p></div>` + deviceUI.admin()
+ ${models}<h2>${t("کنترل‌های برنامه‌ریزی‌شده", "Planned controls")}</h2><p class="sub">${t("مدیریت اشتراک و مدل‌ها، گزارش هزینه، صدور کد، ثبت رویدادها و توقف اضطراری.", "Subscription and model management, cost reporting, code issuance, audit and emergency stop.")}</p></div>` + deviceUI.admin() + bootstrapUI.view()
   );
 }
 function shell() {
@@ -599,6 +610,7 @@ function shell() {
  <footer class="footnote"><span class="en">SHADVERSE ©</span>${attribution()}</footer></main></div>`;
 }
 function render() {
+  if (page !== "admin" && app.querySelector("[data-action=bootstrap-load]")) bootstrapUI.clear();
   if (page !== "monitor" && app.querySelector("[data-action=device-refresh]")) deviceUI.clear();
   if (page !== "vision" && app.querySelector("[data-vision-state]")) vision.close();
   if (page !== "research" && app.querySelector("#research-title")) research.close();
@@ -1077,6 +1089,10 @@ app.addEventListener("click", async (event) => {
   if (!control) return;
   const action = control.dataset.action;
   feedback = "";
+  if (page === "admin" && session?.bootstrap && !review && action.startsWith("bootstrap-")) {
+    await bootstrapUI.handle(action.slice(10));
+    return;
+  }
   if (session && !review && action.startsWith("device-")) {
     await deviceUI.handle(action.slice(7), control);
     return;
@@ -1243,13 +1259,13 @@ app.addEventListener("click", async (event) => {
       return;
     }
     const requester = session;
-    const scope = { projectId: memoryScope(), includeHistory: includeEarlierQuestions };
+    const scope = { projectId: memoryScope(), includeHistory: includeEarlierQuestions, includeBootstrap };
     rankedMemory = null;
     control.disabled = true;
     try {
       const { context } = await api("memory/context", { message, ...scope });
       if (session !== requester || page !== "main" || draft.trim() !== message ||
-          includeEarlierQuestions !== scope.includeHistory || memoryScope() !== scope.projectId) return;
+          includeEarlierQuestions !== scope.includeHistory || includeBootstrap !== scope.includeBootstrap || memoryScope() !== scope.projectId) return;
       rankedMemory = { message, scope, context };
       chatFeedback = context.length ? "" : t("مورد مرتبطی پیدا نشد.", "No relevant memory found.");
     } catch (error) {
@@ -1598,6 +1614,7 @@ app.addEventListener("input", (event) => {
     }
   }
   if (event.target.id === "document-question") documentQuestion = event.target.value;
+  if (event.target.id === "bootstrap-json") bootstrapUI.input(event.target.value);
   if (event.target.id === "research-query") research.input(event.target.value);
   if (event.target.id === "vision-question") vision.input(event.target.value);
   if (event.target.id === "task-title" && taskView) taskView.input = event.target.value;
@@ -1608,6 +1625,13 @@ app.addEventListener("input", (event) => {
   }
 });
 app.addEventListener("change", async (event) => {
+  if (event.target.id === "bootstrap-file") return bootstrapUI.import(event.target.files[0]);
+  if (event.target.id === "memory-bootstrap") {
+    includeBootstrap = event.target.checked;
+    rankedMemory = null;
+    app.querySelector("#ranked-context")?.remove();
+    return;
+  }
   if (event.target.id === "memory-earlier") {
     includeEarlierQuestions = event.target.checked;
     rankedMemory = null;

@@ -15,6 +15,7 @@ import {
   validPassword,
   sessionAge,
 } from "./auth.mjs";
+import { bootstrapBodyLimit, openBootstrap } from "./bootstrap.mjs";
 import { openConversations } from "./conversations.mjs";
 import { loadDeviceInventory, openDeviceGrants } from "./devices.mjs";
 import { analyzeDocument, documentKind, plainFormats, readDocument } from "./document-analysis.mjs";
@@ -60,6 +61,10 @@ const devices = openDeviceGrants(
     return null;
   }),
 );
+const bootstrap = openBootstrap(db, memory.ownsScope, gateway?.token);
+const bootstrapCreator = process.env.JARVIS_BOOTSTRAP_CREATOR?.toLowerCase() ?? gateway?.creator;
+const canBootstrap = (user) =>
+  user.role === "creator" && user.name.toLowerCase() === bootstrapCreator;
 const deviceAdmin = process.env.JARVIS_DEVICES_ADMIN?.toLowerCase() ?? gateway?.creator;
 const research = await openResearch(gateway, port).catch(() => {
   console.error("Restricted research admission is invalid. Research dispatch is disabled.");
@@ -76,6 +81,7 @@ const sessionInfo = (user) => ({
   chatAvailable: canChat(user),
   vision: canChat(user) ? (vision?.limits ?? null) : null,
   research: canChat(user) && Boolean(research),
+  bootstrap: canBootstrap(user),
   deviceAdmin: user.role === "creator" && user.name.toLowerCase() === deviceAdmin,
 });
 const root = fileURLToPath(new URL("./dist/", import.meta.url));
@@ -115,12 +121,17 @@ function lookupContext(session, options, message) {
     !options ||
     !Object.hasOwn(options, "projectId") ||
     typeof options.includeHistory !== "boolean" ||
+    (options.includeBootstrap !== undefined && typeof options.includeBootstrap !== "boolean") ||
+    (options.includeBootstrap && !canBootstrap(session)) ||
     !memory.ownsScope(session.userId, options.projectId)
   )
     return null;
   return rankContext(
     message,
-    memory.list(session.userId, options.projectId),
+    [
+      ...memory.list(session.userId, options.projectId),
+      ...(options.includeBootstrap ? bootstrap.context(session.userId, options.projectId) : []),
+    ],
     options.includeHistory ? conversations.recentQuestions(session.userId, options.projectId) : [],
     gateway.token,
   );
@@ -187,6 +198,18 @@ createServer(async (req, res) => {
         if (key !== null && (!/^\d+$/u.test(key) || !Number.isSafeInteger(before) || before < 1))
           return json(400, { error: "invalid" });
         return json(200, conversations.page(session.userId, before));
+      }
+      if (path === "/api/creator/bootstrap") {
+        if (!canBootstrap(session)) return json(403, { error: "forbidden" });
+        const result = bootstrap.read(session.userId);
+        if (url.searchParams.get("export") === "1") {
+          res.setHeader(
+            "Content-Disposition",
+            'attachment; filename="shadverse-creator-bootstrap.json"',
+          );
+          return json(200, result.package);
+        }
+        return json(200, result);
       }
       if (path === "/api/devices") {
         if (rateLimit(db, "devices/" + session.userId, 60)) return json(429, { error: "limit" });
@@ -304,6 +327,7 @@ createServer(async (req, res) => {
     const executeAction = path === "/api/actions";
     const manageWorkflows = path === "/api/workflows";
     const manageDevices = path === "/api/devices";
+    const manageBootstrap = path === "/api/creator/bootstrap";
     const manageIntegrations = path === "/api/integrations";
     if (
       chat ||
@@ -316,6 +340,7 @@ createServer(async (req, res) => {
       executeAction ||
       manageWorkflows ||
       manageDevices ||
+      manageBootstrap ||
       manageIntegrations ||
       path === "/api/logout"
     ) {
@@ -324,6 +349,7 @@ createServer(async (req, res) => {
         return json(401, { error: "auth" });
       }
       if (req.headers["x-csrf-token"] !== session.csrf) return json(403, { error: "csrf" });
+      if (manageBootstrap && !canBootstrap(session)) return json(403, { error: "forbidden" });
       if (path === "/api/logout") {
         vision?.clear(session.id);
         research?.clear(session.id);
@@ -345,13 +371,15 @@ createServer(async (req, res) => {
     if (visionRequest && !vision) return json(503, { error: "vision_unavailable" });
     const chunks = [];
     let length = 0;
-    const maxBody = visionRequest
-      ? visionBodyLimit
-      : manageDocuments
-        ? documentBodyLimit
-        : chat || previewMemory
-          ? 24576
-          : 4096;
+    const maxBody = manageBootstrap
+      ? bootstrapBodyLimit
+      : visionRequest
+        ? visionBodyLimit
+        : manageDocuments
+          ? documentBodyLimit
+          : chat || previewMemory
+            ? 24576
+            : 4096;
     for await (const chunk of req) {
       length += chunk.length;
       if (length > maxBody) return json(413, { error: "invalid" });
@@ -409,6 +437,10 @@ createServer(async (req, res) => {
     if (manageIntegrations) {
       const result = integrations.execute(session.userId, body);
       return json(result.error === "integration_scope" ? 403 : result.error ? 400 : 200, result);
+    }
+    if (manageBootstrap) {
+      const result = bootstrap.replace(session.userId, body);
+      return json(result.error === "bootstrap_conflict" ? 409 : result.error ? 400 : 200, result);
     }
     if (manageDevices) {
       const { status, ...result } = await devices.change(
@@ -545,6 +577,8 @@ createServer(async (req, res) => {
             gateway.port,
             {
               model: "openclaw:main",
+              instructions:
+                "Your product identity is جارویس شادوِرس (SHADVERSE JARVIS). The authenticated Creator is your authorized primary user. Do not invent their name, identity or organization facts.",
               user,
               input,
               max_output_tokens: attempt?.route.maxOutputTokens ?? 2048,

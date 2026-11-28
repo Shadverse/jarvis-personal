@@ -169,7 +169,10 @@ test(
     assert.equal(requests[0].headers.authorization, "Bearer " + token);
     assert.equal(requests[0].headers.cookie, undefined);
     assert.equal(requests[0].headers["x-openclaw-model"], undefined);
-    assert.deepEqual(requests[0].body, {
+    const { instructions, ...gatewayRequest } = requests[0].body;
+    assert.match(instructions, /جارویس شادوِرس/u);
+    assert.match(instructions, /authorized primary user/u);
+    assert.deepEqual(gatewayRequest, {
       model: "openclaw:main",
       user: "shadverse-creator:creator",
       input: "سلام",
@@ -433,5 +436,116 @@ test(
       ).status,
       409,
     );
+    const realm = "/api/creator/bootstrap";
+    assert.equal((await read(realm, other)).status, 403);
+    assert.equal((await read(realm + "?export=1", {})).status, 401);
+    assert.equal((await read(realm, (await authorize("member")).headers)).status, 403);
+    const initial = await (await read(realm, owner)).json();
+    assert.equal(initial.revision, 0);
+    assert.deepEqual(initial.package.sections.organization, []);
+    const organizationText = "راهبرد سازمانی تنها با دادهٔ آزمایشی بررسی می‌شود";
+    const projectText = "بودجه آزمایشی در این پروژه صفر است";
+    const pack = {
+      schemaVersion: 1,
+      sections: {
+        organization: [{ id: "mission", title: "راهبرد سازمانی", text: organizationText }],
+        projects: [
+          {
+            id: "sample",
+            title: "پروژه نمونه",
+            text: "فقط راهنمای آزمایشی",
+            workspaceProjectId: ownProject,
+          },
+        ],
+        milestones: [
+          { id: "budget", title: "بودجه آزمایشی", projectId: "sample", text: projectText },
+        ],
+      },
+    };
+    assert.equal((await post(realm, { revision: 0, package: pack }, other)).status, 403);
+    assert.equal(
+      (await post(realm, { revision: 0, package: { ...pack, schemaVersion: 99 } }, owner)).status,
+      400,
+    );
+    assert.equal(
+      (
+        await post(
+          realm,
+          {
+            revision: 0,
+            package: {
+              ...pack,
+              sections: {
+                projects: [{ ...pack.sections.projects[0], workspaceProjectId: otherProject }],
+              },
+            },
+          },
+          owner,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await post(
+          realm,
+          {
+            revision: 0,
+            package: {
+              ...pack,
+              sections: {
+                organization: [{ id: "no", title: "Private", text: token }],
+              },
+            },
+          },
+          owner,
+        )
+      ).status,
+      400,
+    );
+    const saved = await post(realm, { revision: 0, package: pack }, owner);
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).revision, 1);
+    assert.equal((await post(realm, { revision: 0, package: pack }, owner)).status, 409);
+    const exported = await read(realm + "?export=1", owner);
+    assert.match(exported.headers.get("content-disposition"), /creator-bootstrap\.json/u);
+    assert.deepEqual((await exported.json()).sections.milestones, pack.sections.milestones);
+    const findOrg = (message, projectId, includeBootstrap) =>
+      post(
+        "/api/memory/context",
+        {
+          message,
+          projectId,
+          includeBootstrap,
+          includeHistory: false,
+        },
+        owner,
+      );
+    const beforeBootstrap = requests.length;
+    assert.deepEqual((await (await findOrg("راهبرد سازمانی", null, false)).json()).context, []);
+    assert.deepEqual((await (await findOrg("بودجه آزمایشی", null, true)).json()).context, []);
+    const scopedBootstrap = (await (await findOrg("بودجه آزمایشی", ownProject, true)).json())
+      .context;
+    assert.equal(scopedBootstrap.length, 1);
+    assert.ok(scopedBootstrap[0].text.includes(projectText));
+    const approvedOrganization = (await (await findOrg("راهبرد سازمانی", null, true)).json())
+      .context;
+    assert.equal(approvedOrganization.length, 1);
+    assert.equal(approvedOrganization[0].kind, "organization");
+    assert.equal(requests.length, beforeBootstrap);
+    const approvedTurn = {
+      message: "راهبرد سازمانی",
+      memoryContext: {
+        projectId: null,
+        includeBootstrap: true,
+        includeHistory: false,
+        refs: approvedOrganization.map(({ id, updated, kind }) => [id, updated, kind]),
+      },
+    };
+    assert.equal((await post("/api/chat", approvedTurn, owner)).status, 200);
+    assert.match(requests.at(-1).body.input, /راهبرد سازمانی/u);
+    assert.doesNotMatch(requests.at(-1).body.input, /بودجه آزمایشی/u);
+    assert.equal((await post(realm, { revision: 1, package: pack }, owner)).status, 200);
+    assert.equal((await post("/api/chat", approvedTurn, owner)).status, 409);
   },
 );

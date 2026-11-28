@@ -48,7 +48,8 @@ export function rankContext(message, notes, history, secret) {
         score,
         relevant:
           matched.length > 1 ||
-          (matched.length === 1 && (query.size === 1 || matched[0].length >= 5)),
+          (matched.length === 1 &&
+            (query.size === 1 || (entry.kind !== "organization" && matched[0].length >= 5))),
       };
     })
     .filter(({ relevant }) => relevant)
