@@ -54,6 +54,14 @@ The application hashes passwords with individually salted scrypt (N=32768, r=8, 
 2. Use the same owner-only JARVIS state directory to preserve existing application accounts and invite codes. If the Creator has only an edge Basic Auth account, provision that Creator’s application account with `manage.mjs creator NAME` before the cutover. Set `JARVIS_GATEWAY_CREATOR` to that exact application username. Give the application a token file owned by its service account at mode 0600, outside the checkout and static root. Set `JARVIS_GATEWAY_TOKEN_FILE` to its absolute path and `JARVIS_GATEWAY_PORT` if the private port differs from 18789. Restart the application to reload a rotated token. The Gateway token and provider credential are never supplied by the browser.
 3. Bind the application to loopback and set `JARVIS_ORIGIN` to the exact HTTPS origin. At the HTTPS edge, route the entire product host to the application only, preserve its Host header, and disable Basic Auth on that host's application route. Eliminate the old public upstream mapping to Gateway HTTP and WebSocket paths on that host. Retain private operator access. The application ignores forwarded IP headers, so one edge shares the 40-attempt socket ceiling. Confirm that ceiling is appropriate for the Creator launch before changing the public host.
 
+From the staging shell with the same Gateway environment as the application, run:
+
+```bash
+node manage.mjs check-gateway
+```
+
+The command uses the application's owner-only token file and direct IPv4 loopback transport. It sends two empty Responses requests and checks that the Gateway rejects anonymous access and rejects the authenticated body at schema validation. `ready_for_live_review` confirms those checks. The command sends no model prompt and reports only a status code. Follow the private staging guide to verify real Persian inference and a follow-up turn. [Creator staging acceptance](PHASE_04_STAGING.md)
+
 For an NGINX HTTPS virtual host whose product process uses port 3000, the route is:
 
 ```nginx

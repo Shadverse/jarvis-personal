@@ -56,14 +56,14 @@ curl --noproxy '*' -sS -o /dev/null -w '%{http_code}\n' \
 ```bash
 set -eo pipefail
 umask 077
-reviewed=6b75ad2b7a38f77a51f02eb6a7bf0a04063eb78b
+reviewed=${JARVIS_REVIEWED_COMMIT:?Set this to the full reviewed commit SHA}
 product=deploy/shadverse/product
 git cat-file -e "$reviewed^{commit}" || git fetch --no-tags origin feature/shadverse-product-recovery
 esbuild_package=$(cd "$product" && node -p 'require.resolve("esbuild/package.json")')
 encrypted_root=/PATH/TO/ENCRYPTED/CREATOR/STORAGE
 stage=$(mktemp -d "$encrypted_root/jarvis-phase04.XXXXXX")
 install -d -m 700 "$stage"/{state,node_modules,nginx-client,nginx-proxy}
-git archive "$reviewed:$product" auth.mjs build.mjs manage.mjs server.mjs web | tar -x -C "$stage"
+git archive "$reviewed:$product" auth.mjs build.mjs gateway.mjs manage.mjs server.mjs web | tar -x -C "$stage"
 ln -s "$(dirname "$esbuild_package")" "$stage/node_modules/esbuild"
 node "$stage/build.mjs"
 
@@ -82,6 +82,9 @@ read -rsp 'Existing Gateway token from the approved server-side source: ' phase0
 printf '\n'
 printf '%s' "$phase04_token" > "$JARVIS_GATEWAY_TOKEN_FILE"
 unset phase04_token
+
+# Expected status: ready_for_live_review. Sends no model prompt.
+node "$stage/manage.mjs" check-gateway
 
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -sha256 \
   -subj '/CN=jarvis-stage.localhost' -addext 'subjectAltName=DNS:jarvis-stage.localhost' \

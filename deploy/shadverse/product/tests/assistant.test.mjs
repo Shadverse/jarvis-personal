@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 import { addUser, invite, openStore } from "../auth.mjs";
 
 test(
@@ -15,7 +16,7 @@ test(
   async (t) => {
     const dir = await mkdtemp(join(tmpdir(), "jarvis-assistant-"));
     const db = openStore(dir);
-    const token = randomBytes(32).toString("hex");
+    const token = randomBytes(150).toString("hex");
     const tokenFile = join(dir, "gateway-token");
     await writeFile(tokenFile, token, { mode: 0o600 });
     const password = randomUUID();
@@ -30,6 +31,7 @@ test(
     }
     const requests = [];
     let failUpstream = false;
+    let denyAnonymous = true;
     const gateway = createServer(async (req, res) => {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
@@ -39,7 +41,18 @@ test(
         body: JSON.parse(Buffer.concat(chunks)),
       });
       res.setHeader("Content-Type", "application/json");
-      if (failUpstream) {
+      if (!Object.hasOwn(requests.at(-1).body, "input")) {
+        if (!req.headers.authorization && denyAnonymous) {
+          res.statusCode = 401;
+          res.end("{}");
+        } else if (req.headers.authorization && req.headers.authorization !== "Bearer " + token) {
+          res.statusCode = 401;
+          res.end(JSON.stringify({ error: token }));
+        } else {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: { type: "invalid_request_error" } }));
+        }
+      } else if (failUpstream) {
         res.statusCode = 401;
         res.end(JSON.stringify({ error: token }));
       } else {
@@ -63,21 +76,22 @@ test(
     const port = reserve.address().port;
     await new Promise((resolve) => reserve.close(resolve));
     const origin = "http://localhost:" + port;
+    const env = {
+      ...process.env,
+      PORT: String(port),
+      JARVIS_STATE: dir,
+      JARVIS_ORIGIN: origin,
+      JARVIS_GATEWAY_TOKEN_FILE: tokenFile,
+      JARVIS_GATEWAY_PORT: String(gateway.address().port),
+      JARVIS_GATEWAY_CREATOR: "creator",
+      NODE_USE_ENV_PROXY: "1",
+      HTTP_PROXY: "http://127.0.0.1:1",
+      NO_PROXY: "",
+      http_proxy: "http://127.0.0.1:1",
+      no_proxy: "",
+    };
     const server = spawn(process.execPath, [new URL("../server.mjs", import.meta.url).pathname], {
-      env: {
-        ...process.env,
-        PORT: String(port),
-        JARVIS_STATE: dir,
-        JARVIS_ORIGIN: origin,
-        JARVIS_GATEWAY_TOKEN_FILE: tokenFile,
-        JARVIS_GATEWAY_PORT: String(gateway.address().port),
-        JARVIS_GATEWAY_CREATOR: "creator",
-        NODE_USE_ENV_PROXY: "1",
-        HTTP_PROXY: "http://127.0.0.1:1",
-        NO_PROXY: "",
-        http_proxy: "http://127.0.0.1:1",
-        no_proxy: "",
-      },
+      env,
     });
     const exit = once(server, "exit");
     t.after(async () => {
@@ -161,5 +175,52 @@ test(
     assert.equal((await post("/api/chat", body, headers)).status, 401);
     assert.equal((await post("/v1/responses", body, headers)).status, 405);
     assert.equal(requests.length, 2);
+
+    failUpstream = false;
+    const restored = await authorize("creator");
+    assert.notEqual(restored.headers.Cookie, headers.Cookie);
+    const followUp = await post("/api/chat", { message: "پیام دوم" }, restored.headers);
+    assert.equal(followUp.status, 200);
+    assert.equal(requests[2].body.input, "پیام دوم");
+    assert.equal(requests[2].body.user, requests[0].body.user);
+
+    const check = (overrides = {}) =>
+      promisify(execFile)(
+        process.execPath,
+        [new URL("../manage.mjs", import.meta.url).pathname, "check-gateway"],
+        { env: { ...env, JARVIS_STATE: "", ...overrides } },
+      );
+    const diagnostic = await check();
+    assert.deepEqual(JSON.parse(diagnostic.stdout), { status: "ready_for_live_review" });
+    assert.deepEqual(
+      requests.slice(3).map(({ headers, body }) => [headers.authorization, body]),
+      [
+        [undefined, {}],
+        ["Bearer " + token, {}],
+      ],
+    );
+    denyAnonymous = false;
+    await assert.rejects(check(), (err) => {
+      assert.equal(err.code, 1);
+      assert.deepEqual(JSON.parse(err.stdout), { status: "unexpected_anonymous_status" });
+      assert.ok(!err.stdout.includes(token));
+      return true;
+    });
+    assert.equal(requests.length, 6);
+    assert.equal(requests[5].headers.authorization, undefined);
+
+    denyAnonymous = true;
+    const invalidTokenFile = join(dir, "invalid-gateway-token");
+    await writeFile(invalidTokenFile, randomBytes(32).toString("hex"), { mode: 0o600 });
+    await assert.rejects(check({ JARVIS_GATEWAY_TOKEN_FILE: invalidTokenFile }), (err) => {
+      assert.equal(err.code, 1);
+      assert.deepEqual(JSON.parse(err.stdout), { status: "credential_rejected" });
+      assert.ok(!err.stdout.includes(token));
+      return true;
+    });
+    assert.deepEqual(
+      requests.slice(6).map((item) => item.body),
+      [{}, {}],
+    );
   },
 );

@@ -1,5 +1,5 @@
-import { open, readFile } from "node:fs/promises";
-import { createServer, request } from "node:http";
+import { readFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { resolve, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -12,6 +12,7 @@ import {
   validPassword,
   sessionAge,
 } from "./auth.mjs";
+import { loadGateway, postResponses, readGatewayJson } from "./gateway.mjs";
 process.umask(0o077);
 const db = openStore(process.env.JARVIS_STATE);
 const port = Number(process.env.PORT || 3000);
@@ -23,33 +24,9 @@ if (
 )
   throw Error("Use HTTPS for an external application origin.");
 const localReview = ["localhost", "127.0.0.1"].includes(origin.hostname);
-const gatewayCreator = process.env.JARVIS_GATEWAY_CREATOR?.toLowerCase();
-const gatewayTokenFile = process.env.JARVIS_GATEWAY_TOKEN_FILE;
-const gatewayPort = Number(process.env.JARVIS_GATEWAY_PORT || 18789);
-let gatewayToken;
-if (gatewayTokenFile || gatewayCreator) {
-  if (
-    !gatewayTokenFile?.startsWith("/") ||
-    !validName(gatewayCreator) ||
-    !Number.isInteger(gatewayPort) ||
-    gatewayPort < 1 ||
-    gatewayPort > 65535 ||
-    gatewayPort === port
-  )
-    throw Error("Set the private Gateway token file, Creator username and loopback port.");
-  const file = await open(gatewayTokenFile);
-  try {
-    const info = await file.stat();
-    if (!info.isFile() || info.size > 4096 || info.uid !== process.getuid() || info.mode & 0o077)
-      throw Error("Use an owner-only Gateway token file.");
-    gatewayToken = (await file.readFile("utf8")).trim();
-    if (!/^[!-~]{32,512}$/.test(gatewayToken)) throw Error("Invalid Gateway credential.");
-  } finally {
-    await file.close();
-  }
-}
+const gateway = await loadGateway();
 const canChat = (user) =>
-  Boolean(gatewayToken && user.role === "creator" && user.name.toLowerCase() === gatewayCreator);
+  Boolean(gateway && user.role === "creator" && user.name.toLowerCase() === gateway.creator);
 const sessionInfo = (user) => ({
   name: user.name,
   role: user.role,
@@ -158,49 +135,24 @@ createServer(async (req, res) => {
       if (chatPending) return json(429, { error: "busy" });
       chatPending = true;
       try {
-        const payload = Buffer.from(
-          JSON.stringify({
+        const upstream = await postResponses(
+          gateway.port,
+          {
             model: "openclaw:main",
-            user: "shadverse-creator:" + gatewayCreator,
+            user: "shadverse-creator:" + gateway.creator,
             input: message,
             max_output_tokens: 2048,
-          }),
+          },
+          gateway.token,
+          120_000,
         );
-        const upstream = await new Promise((resolveResponse, reject) => {
-          // A fresh direct loopback connection keeps the owner credential off environment proxies.
-          const call = request(
-            {
-              host: "127.0.0.1",
-              port: gatewayPort,
-              path: "/v1/responses",
-              method: "POST",
-              agent: false,
-              signal: AbortSignal.timeout(120_000),
-              headers: {
-                Authorization: "Bearer " + gatewayToken,
-                "Content-Type": "application/json",
-                "Content-Length": payload.length,
-              },
-            },
-            resolveResponse,
-          );
-          call.on("error", reject);
-          call.end(payload);
-        });
         if (upstream.statusCode !== 200) {
           upstream.destroy();
           return json(upstream.statusCode === 409 ? 409 : 502, {
             error: upstream.statusCode === 409 ? "archived" : "gateway",
           });
         }
-        const responseChunks = [];
-        let responseLength = 0;
-        for await (const chunk of upstream) {
-          responseLength += chunk.length;
-          if (responseLength > 256 * 1024) return json(502, { error: "gateway" });
-          responseChunks.push(chunk);
-        }
-        const result = JSON.parse(Buffer.concat(responseChunks));
+        const result = await readGatewayJson(upstream, 256 * 1024);
         const reply = (result.output ?? [])
           .filter((item) => item.type === "message" && item.role === "assistant")
           .flatMap((item) => item.content ?? [])
@@ -208,7 +160,7 @@ createServer(async (req, res) => {
           .map((part) => part.text)
           .join("\n")
           .trim();
-        if (result.status !== "completed" || !reply || reply.includes(gatewayToken))
+        if (result.status !== "completed" || !reply || reply.includes(gateway.token))
           return json(502, { error: "gateway" });
         return json(200, { reply });
       } catch {
