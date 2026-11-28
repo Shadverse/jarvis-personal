@@ -2,9 +2,9 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Phase G · Private project actions
+**Active milestone** Phase G · Private project tasks
 
-**Latest verified remote checkpoint before Phase G** `9e7c09461f95410d32bf99250035fa799b170a0b`
+**Latest verified remote checkpoint before project tasks** `a19cb8a384eedc9aef086451f856ab6860b2eec9`
 
 **Phase A live acceptance** PENDING. The Phase A checkpoint is on the remote branch.
 **Graphics** Frozen. The current interface and isolated hologram preview are retained.
@@ -33,7 +33,8 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | F | Provider-backed image, video, audio, music, presentations and document generation | MISSING | Product capability catalog and generation adapters are absent. |
 | G | Existing private OpenClaw tool and paired-device access | PARTIALLY IMPLEMENTED | The upstream operator path is separate. There is no product permission layer for application launching, files, browser actions, commands, desktop companion, mobile actions or external tools. |
 | G | Account-scoped project creation and listing | VERIFIED LOCAL | Workspace registers one explicit local action. Isolation, limits, CSRF and idempotent creation passed the HTTP fixture. |
-| G–I | Project tasks and automated action execution | MISSING | No durable task lifecycle or assistant-triggered execution. |
+| G–I | Private project tasks | VERIFIED LOCAL | The API fixture checked explicit creation, completion and reopening, with project and account isolation. |
+| G–I | Automatic, device and scheduled execution | MISSING | No assistant-driven execution, device companion or scheduler. |
 | H | Email, calendar, web search, GitHub, cloud storage, messaging, APIs and MCP integrations | MISSING | Product connector authorization, scoped accounts and permission UI are absent. |
 | I | Reminders, schedules, workflows, triggers, job execution and recovery, cancellation, notifications, audit and emergency stop | MISSING | No product job subsystem. Existing OpenClaw scheduling has no SHADVERSE admission or lifecycle integration. |
 | J | Creator role, read-only directory and operator registration codes and revocation | PARTIALLY IMPLEMENTED | Creator and member roles are present. Operator commands and the directory cover limited administration. |
@@ -99,4 +100,6 @@ Workspace → Drafts exports the selected draft as standalone printable HTML wit
 
 Workspace → Projects uses the authenticated action registry to create and list private projects. The single allowlisted action validates a name, derives the owner from the session and records successful creation with a generated ID and timestamp. The HTTP fixture checked anonymous denial, CSRF, unknown actions, requester-supplied owners, cross-account isolation, persistency across sign-out and the 50-project limit. Repeat submissions of an existing name return its existing record. The registry has no shell, device, external messaging, background jobs or model-triggered execution.
 
-**Next implementation step.** Add explicit task create, list, complete and confirmed delete actions using the persisted project ID. Enforce project ownership in every task statement, cap tasks per project and verify two-account denial in one targeted test.
+The follow-up checkpoint adds Workspace → Projects → Tasks. It supports creating, listing, completing and reopening tasks and caps storage at 100 tasks per project. The targeted HTTP fixture verified the Persian title, exact project and account scope, persisted completion, repeat completion and reopening. Browser controls are pending staging acceptance. Deletion, scheduling, and model-triggered actions remain outside this checkpoint.
+
+**Next implementation step.** Start Phase H with the disconnected integration catalog and an authenticated account-owned grant lifecycle. Verify consent scope, expiry and revocation using a local fixture. Keep real outbound connectors disabled until official authorization is available.

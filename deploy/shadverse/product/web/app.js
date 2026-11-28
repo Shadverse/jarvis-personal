@@ -44,6 +44,8 @@ let head = null,
   voiceRun = null;
 let projects = [],
   projectsLoaded = false,
+  projectIds = new Map(),
+  taskView = null,
   activeProject = "",
   notes = [],
   personalNotes = null,
@@ -72,6 +74,8 @@ function clearWorkspace() {
   workspaceEpoch++;
   projects = [];
   projectsLoaded = false;
+  projectIds.clear();
+  taskView = null;
   activeProject = "";
   notes = [];
   personalNotes = null;
@@ -288,9 +292,27 @@ function listItems() {
               `<a class="outline" href="/api/documents?id=${encodeURIComponent(item.id)}">${t("دریافت", "Download")}</a>` +
               button("document-delete-" + item.id, t("حذف", "Delete"), "outline")
             : tab === "history" || tab === "projects" ? button("open-item-" + i, icon("arrow") + t("باز کردن", "Open"), "outline") : ""}
-          ${tab === "history" ? button("draft-export-" + i, t("دریافت سند", "Download document"), "outline") : ""}</div>`,
+          ${tab === "history" ? button("draft-export-" + i, t("دریافت سند", "Download document"), "outline") : ""}
+          ${privateProjects() && projectIds.has(item.name) ? button("project-tasks-" + i, t("وظایف", "Tasks"), "outline") : ""}</div>`,
     )
     .join("");
+}
+function projectTasks() {
+  if (!privateProjects() || !taskView) return "";
+  const { name, tasks, busy, error, input } = taskView;
+  const rows = tasks.map((task) => {
+    const completed = task.completed !== null;
+    return `<div class="work-row"><bdi>${safe(task.title)}</bdi>
+      <span>${completed ? t("انجام شد", "Completed") : t("باز", "Open")}</span>
+      ${button("task-toggle-" + task.id, completed ? t("بازگشایی", "Reopen") : t("تکمیل", "Complete"), "outline")}</div>`;
+  }).join("");
+  return `<section class="surface stack" aria-busy="${busy}">
+    <h3>${t("وظایف پروژه", "Project tasks")} · <bdi>${safe(name)}</bdi></h3>
+    <div class="controls">${button("tasks-close", t("بستن وظایف", "Close tasks"), "outline")}
+    <label class="field"><input id="task-title" dir="auto" maxlength="200" value="${safe(input)}" aria-label="${t("عنوان وظیفه", "Task title")}" placeholder="${t("عنوان وظیفه", "Task title")}"></label>
+    ${button("task-add", t("افزودن وظیفه", "Add task"), "outline")}</div>
+    ${error ? `<p role="status">${safe(error)}</p>` : ""}
+    ${rows || (!busy && !error ? `<p class="empty">${t("هنوز وظیفه‌ای ثبت نشده است.", "No tasks yet.")}</p>` : "")}</section>`;
 }
 function space() {
   const add = tab === "projects" || tab === "memory";
@@ -314,7 +336,7 @@ function space() {
    ${documentPreview ? `<label class="field"><bdi>${safe(documentPreview.name)}</bdi>
       <textarea readonly rows="8" dir="auto" aria-label="${t("متن فایل", "File contents")}">${safe(documentPreview.text)}</textarea></label>` : ""}`
    : ["files", "gallery"].includes(tab) ? `<input type="file" id="workspace-file" multiple hidden ${tab === "gallery" ? 'accept="image/png,image/jpeg,image/webp"' : ""}>${button("pick-file", icon("attach") + t("انتخاب فایل محلی", "Choose local file"))}` : ""}
- <div id="results">${listItems()}</div></section>`
+ <div id="results">${listItems()}</div></section>${projectTasks()}`
   );
 }
 function monitor() {
@@ -436,6 +458,10 @@ function errorText(code) {
     ),
     file_invalid: t("فایل متنی UTF-8 با نام معتبر و حداکثر ۱ مگابایت انتخاب کنید.", "Choose a valid UTF-8 text file up to 1 MiB."),
     file_missing: t("فایل در حساب شما پیدا نشد.", "This file was not found in your account."),
+    project_missing: t("پروژه در حساب شما پیدا نشد.", "This project was not found in your account."),
+    task_missing: t("این وظیفه در پروژه پیدا نشد.", "This task was not found in the project."),
+    task_invalid: t("عنوان معتبر وظیفه را وارد کنید.", "Enter a valid task title."),
+    task_cap: t("حداکثر ۱۰۰ وظیفه در هر پروژه مجاز است.", "Each project can hold up to 100 tasks."),
     project_invalid: t("نام معتبر پروژه را وارد کنید.", "Enter a valid project name."),
     project_cap: t("حداکثر ۵۰ پروژه مجاز است.", "You can save up to 50 projects."),
     file_cap: t("به سقف ذخیره‌سازی فایل رسیده‌اید.", "Your file storage limit has been reached."),
@@ -607,6 +633,7 @@ async function updateProjects(name, control) {
     const result = await api("actions", name ? { action: "project.create", input: { name } } : undefined);
     if (session !== requester || (!name && projectsLoaded)) return;
     projects = result.projects.map((project) => project.name);
+    projectIds = new Map(result.projects.map((project) => [project.name, project.id]));
     projectsLoaded = true;
     if (name && privateProjects()) {
       activeProject = result.project.name;
@@ -624,6 +651,34 @@ async function updateProjects(name, control) {
     return;
   }
   if (privateProjects()) render();
+}
+async function updateTasks(action, fields) {
+  const view = taskView;
+  const requester = session;
+  if (view.busy) return;
+  view.busy = true;
+  view.error = "";
+  render();
+  try {
+    const result = action
+      ? await api("actions", { action, input: { projectId: view.id, ...fields } })
+      : await api("actions?project=" + encodeURIComponent(view.id));
+    if (session !== requester || taskView !== view) return;
+    view.tasks = result.tasks;
+    if (action === "task.create" && view.input.trim() === fields.title) view.input = "";
+  } catch (error) {
+    if (session !== requester || taskView !== view) return;
+    if (error.message === "auth") {
+      returnToGate();
+      return;
+    }
+    view.error = errorText(error.message);
+  } finally {
+    if (session === requester && taskView === view) {
+      view.busy = false;
+      if (privateProjects()) render();
+    }
+  }
 }
 async function loadPersonalMemory() {
   const requester = session;
@@ -760,6 +815,32 @@ app.addEventListener("click", async (event) => {
       await changePersonalMemory({ operation: "delete", id: note.id }, control);
     }
     return;
+  }
+  if (privateProjects() && action.startsWith("project-tasks-")) {
+    const name = workspaceItems()[Number(action.slice("project-tasks-".length))]?.name;
+    const id = projectIds.get(name);
+    if (id && taskView?.id !== id) {
+      taskView = { id, name, tasks: [], busy: false, error: "", input: "" };
+      await updateTasks();
+    }
+    return;
+  }
+  if (privateProjects() && taskView) {
+    if (action === "tasks-close") {
+      taskView = null;
+      render();
+      return;
+    }
+    if (action === "task-add") {
+      const title = taskView.input.trim();
+      if (title) await updateTasks("task.create", { title });
+      return;
+    }
+    if (action.startsWith("task-toggle-")) {
+      const task = taskView.tasks.find(({ id }) => id === action.slice("task-toggle-".length));
+      if (task) await updateTasks("task.setCompleted", { taskId: task.id, completed: task.completed === null });
+      return;
+    }
   }
   if (action === "add-item") {
     const name = app.querySelector("#item-name").value.trim();
@@ -918,6 +999,7 @@ app.addEventListener("click", async (event) => {
 });
 app.addEventListener("input", (event) => {
   if (event.target.id === "draft") draft = event.target.value;
+  if (event.target.id === "task-title" && taskView) taskView.input = event.target.value;
   if (event.target.id === "search") {
     query = event.target.value;
     app.querySelector("#results").innerHTML = listItems();

@@ -54,6 +54,12 @@ const types = {
 };
 const cookie = (value, age) =>
   `__Host-jarvis=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${age}`;
+function actionStatus({ error }) {
+  if (!error) return 200;
+  if (["project_cap", "task_cap"].includes(error)) return 409;
+  if (["project_missing", "task_missing"].includes(error)) return 404;
+  return 400;
+}
 let pending = 0;
 let chatPending = false;
 createServer(async (req, res) => {
@@ -97,7 +103,12 @@ createServer(async (req, res) => {
     if (req.method === "GET") {
       if (!session) return json(401, { error: "auth" });
       if (path === "/api/session") return json(200, sessionInfo(session));
-      if (path === "/api/actions") return json(200, actions.list(session.userId));
+      if (path === "/api/actions") {
+        const projectId = url.searchParams.get("project");
+        if (projectId === null) return json(200, actions.list(session.userId));
+        const result = actions.listTasks(session.userId, projectId);
+        return json(actionStatus(result), result);
+      }
       if (path === "/api/documents") {
         const id = url.searchParams.get("id");
         if (id === null) return json(200, { files: documents.list(session.userId) });
@@ -181,7 +192,7 @@ createServer(async (req, res) => {
     }
     if (executeAction) {
       const result = actions.execute(session.userId, body);
-      return json(result.error === "project_cap" ? 409 : result.error ? 400 : 200, result);
+      return json(actionStatus(result), result);
     }
     if (manageDocuments) {
       const error = documents.change(session.userId, body);

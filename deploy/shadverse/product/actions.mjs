@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { openTasks } from "./tasks.mjs";
 
 const createProject = {
   id: "project.create",
@@ -22,6 +23,7 @@ export function openActions(db) {
       UNIQUE(owner, name)
     );
   `);
+  const tasks = openTasks(db);
   const list = db.prepare(
     "SELECT id, name, created FROM workspace_projects WHERE owner=? ORDER BY created, id",
   );
@@ -37,11 +39,14 @@ export function openActions(db) {
   `);
   return {
     list(owner) {
-      return { registry: [createProject], projects: list.all(owner) };
+      return { registry: [createProject, ...tasks.actions], projects: list.all(owner) };
     },
+    listTasks: tasks.list,
     execute(owner, body) {
-      if (!body || Object.keys(body).length !== 2 || body.action !== createProject.id)
-        return { error: "project_invalid" };
+      if (!body || Object.keys(body).length !== 2) return { error: "project_invalid" };
+      if (tasks.actions.some((entry) => entry.id === body.action))
+        return tasks.execute(owner, body);
+      if (body.action !== createProject.id) return { error: "project_invalid" };
       const input = body.input;
       if (!input || Object.keys(input).length !== 1 || typeof input.name !== "string")
         return { error: "project_invalid" };

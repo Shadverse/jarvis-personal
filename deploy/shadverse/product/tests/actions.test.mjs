@@ -9,7 +9,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { addUser, invite, openStore } from "../auth.mjs";
 
-test("private project creation is explicit, bounded, idempotent, and isolated", async (t) => {
+test("private projects and tasks enforce explicit actions, quotas, and ownership", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "jarvis-actions-"));
   const db = openStore(dir);
   const password = randomUUID();
@@ -88,7 +88,7 @@ test("private project creation is explicit, bounded, idempotent, and isolated", 
   assert.deepEqual(other.projects, []);
   assert.deepEqual(
     other.registry.map((entry) => entry.id),
-    ["project.create"],
+    ["project.create", "task.create", "task.setCompleted"],
   );
   assert.equal((await post("logout", {}, member)).status, 200);
   assert.equal((await get(member)).status, 401);
@@ -102,4 +102,48 @@ test("private project creation is explicit, bounded, idempotent, and isolated", 
     (await (await post("actions", create(name), restored)).json()).project,
     result.project,
   );
+  const projectId = result.project.id;
+  const getTasks = (headers) => fetch(origin + "/api/actions?project=" + projectId, { headers });
+  const addTask = { action: "task.create", input: { projectId, title: "  بررسی متن فارسی  " } };
+  assert.equal((await getTasks(creator)).status, 404);
+  assert.equal((await post("actions", addTask, creator)).status, 404);
+  const createdTask = await post("actions", addTask, restored);
+  assert.equal(createdTask.status, 200);
+  const [task] = (await createdTask.json()).tasks;
+  assert.equal(task.title, "بررسی متن فارسی");
+  assert.equal(task.completed, null);
+  const complete = {
+    action: "task.setCompleted",
+    input: { projectId, taskId: task.id, completed: true },
+  };
+  assert.equal((await post("actions", complete, creator)).status, 404);
+  const otherProject = (await (await post("actions", create(name), creator)).json()).project;
+  assert.equal(
+    (
+      await post(
+        "actions",
+        {
+          ...complete,
+          input: { ...complete.input, projectId: otherProject.id },
+        },
+        creator,
+      )
+    ).status,
+    404,
+  );
+  const completed = await post("actions", complete, restored);
+  assert.equal(completed.status, 200);
+  const [done] = (await completed.json()).tasks;
+  assert.ok(done.completed >= done.created);
+  assert.deepEqual((await (await post("actions", complete, restored)).json()).tasks, [done]);
+  assert.deepEqual((await (await getTasks(restored)).json()).tasks, [done]);
+  const reopened = await post(
+    "actions",
+    {
+      ...complete,
+      input: { ...complete.input, completed: false },
+    },
+    restored,
+  );
+  assert.deepEqual((await reopened.json()).tasks, [task]);
 });
