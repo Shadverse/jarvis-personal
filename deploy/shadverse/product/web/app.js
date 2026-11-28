@@ -63,6 +63,7 @@ let projects = [],
   includeEarlierQuestions = false,
   actionPlan = null,
   workflowState = null,
+  workflowTask = null,
   editingNote = null,
   privateDocuments = null,
   documentFormats = { read: [], write: [] },
@@ -107,6 +108,7 @@ function clearWorkspace() {
   includeEarlierQuestions = false;
   actionPlan = null;
   workflowState = null;
+  workflowTask = null;
   editingNote = null;
   privateDocuments = null;
   documentFormats = { read: [], write: [] };
@@ -405,6 +407,7 @@ function projectTasks() {
     return `<div class="work-row"><bdi>${safe(task.title)}</bdi>
       <span>${completed ? t("انجام شد", "Completed") : t("باز", "Open")}</span>
       ${task.due === null ? "" : `<bdi>${safe(reminderDate(task.due))}</bdi>`}
+      ${!completed ? button("workflow-followup-" + task.id, t("زمان‌بندی پیگیری", "Schedule follow-up"), "outline", busy) : ""}
       ${button("task-toggle-" + task.id, completed ? t("بازگشایی", "Reopen") : t("تکمیل", "Complete"), "outline", busy)}
       ${completed ? "" : button("reminder-edit-" + task.id, t("تنظیم یادآور", "Set reminder"))}
       ${task.due === null ? "" : button("reminder-cancel-" + task.id, t("لغو یادآور", "Cancel reminder"), "outline", busy)}</div>
@@ -431,8 +434,15 @@ function workflowPanel() {
   };
   return `<section class="surface stack">
     <h3>${t("خلاصه‌های زمان‌بندی‌شدهٔ پروژه", "Scheduled project summaries")}</h3>
+    ${workflowState.notifications.length ? `<div class="stack"><h4>${t("اعلان‌ها", "Notifications")}</h4>
+      ${workflowState.notifications.map((notice) => `<div class="work-row"><bdi>${safe(notice.project)} ·
+        ${notice.result.task ? safe(notice.result.task) : `${notice.result.completed} / ${notice.result.total}`}</bdi>
+        <bdi>${safe(reminderDate(notice.created))}</bdi>
+        ${button("workflow-ack-" + notice.id, t("دیدم", "Acknowledge"))}</div>`).join("")}</div>` : ""}
     <div class="controls">
-      <label>${t("پروژه", "Project")} <select id="workflow-project">
+      ${workflowTask ? `<bdi>${t("پیگیری وظیفه", "Task follow-up")} · ${safe(workflowTask.title)}</bdi>
+        ${button("workflow-reset", t("انتخاب خلاصهٔ پروژه", "Switch to project summary"))}` : ""}
+      <label>${t("پروژه", "Project")} <select id="workflow-project" ${workflowTask ? "disabled" : ""}>
         ${projects.map((name) => `<option value="${safe(projectIds.get(name))}" ${name === activeProject ? "selected" : ""}>${safe(name)}</option>`).join("")}
       </select></label>
       <label class="field"><input id="workflow-due" type="datetime-local" aria-label="${t("زمان شروع", "Start time")}"></label>
@@ -440,7 +450,8 @@ function workflowPanel() {
         <option value="once">${t("یک‌بار", "Once")}</option>
         <option value="daily">${t("هر ۲۴ ساعت", "Every 24 hours")}</option>
       </select>
-      ${button("workflow-schedule", t("زمان‌بندی خلاصه", "Schedule summary"), "outline", !projects.length)}
+      ${workflowTask ? "" : `<label><input id="workflow-notify" type="checkbox"> ${t("اعلان در فضای کار", "Notify in Workspace")}</label>`}
+      ${button("workflow-schedule", workflowTask ? t("زمان‌بندی پیگیری", "Schedule follow-up") : t("زمان‌بندی خلاصه", "Schedule summary"), "outline", !projects.length)}
       ${button("workflow-refresh", t("تازه‌سازی", "Refresh"))}
       ${button("workflow-pause", workflowState.paused ? t("ازسرگیری اجرا", "Resume jobs") : t("توقف اجرا", "Pause jobs"))}
       ${workflowState.workflows.some(({ status }) => status !== "scheduled") ? button("workflow-clear", t("پاک‌کردن سوابق پایان‌یافته", "Clear finished history")) : ""}
@@ -448,7 +459,8 @@ function workflowPanel() {
     ${workflowState.paused ? `<p>${t("اجرای خودکار برای این حساب متوقف است.", "Background execution is paused for this account.")}</p>` : ""}
     ${workflowState.workflows.map((job) => `<div class="work-row"><bdi>${safe(job.name)} · ${stateText[job.status]}</bdi>
       ${job.nextDue === null ? "" : `<bdi>${safe(reminderDate(job.nextDue))}</bdi>`}
-      ${job.result ? `<bdi>${t("آخرین خلاصه", "Latest summary")} · ${job.result.completed} / ${job.result.total} ${t("انجام‌شده", "completed")}</bdi>` : ""}
+      ${job.taskTitle ? `<bdi>${safe(job.taskTitle)}</bdi>` : ""}
+      ${job.result && !job.taskTitle ? `<bdi>${t("آخرین خلاصه", "Latest summary")} · ${job.result.completed} / ${job.result.total} ${t("انجام‌شده", "completed")}</bdi>` : ""}
       ${job.status === "scheduled" ? button("workflow-cancel-" + job.id, t("لغو", "Cancel")) : ""}
     </div>`).join("")}
   </section>`;
@@ -1273,6 +1285,15 @@ app.addEventListener("click", async (event) => {
     }
     return;
   }
+  if (privateProjects() && action.startsWith("workflow-followup-") && taskView) {
+    const task = taskView.tasks.find(({ id }) => id === action.slice("workflow-followup-".length));
+    if (!task || task.completed !== null) return;
+    workflowTask = { id: task.id, title: task.title, projectId: taskView.id };
+    if (workflowState) render();
+    else await updateWorkflows();
+    app.querySelector("#workflow-due")?.focus();
+    return;
+  }
   if (privateProjects() && action === "workflow-open") {
     control.disabled = true;
     await updateWorkflows();
@@ -1281,6 +1302,11 @@ app.addEventListener("click", async (event) => {
   if (privateProjects() && workflowState && action.startsWith("workflow-")) {
     const operation = action.slice(9);
     let body;
+    if (operation === "reset") {
+      workflowTask = null;
+      render();
+      return;
+    }
     if (operation === "schedule") {
       const date = new Date(app.querySelector("#workflow-due").value).getTime();
       if (!Number.isSafeInteger(date)) {
@@ -1288,13 +1314,15 @@ app.addEventListener("click", async (event) => {
         app.querySelector(".notice").textContent = feedback;
         return;
       }
-      body = { operation, projectId: app.querySelector("#workflow-project").value,
+      body = { operation, projectId: workflowTask?.projectId ?? app.querySelector("#workflow-project").value,
+        taskId: workflowTask?.id ?? null, notify: app.querySelector("#workflow-notify")?.checked ?? true,
         cadence: app.querySelector("#workflow-cadence").value, due: date };
     } else if (operation === "pause") body = { operation, paused: !workflowState.paused };
     else if (operation === "clear") {
-      if (!confirm(t("سوابق پایان‌یافته پاک شوند؟", "Clear finished workflow records?"))) return;
+      if (!confirm(t("سوابق پایان‌یافته و اعلان‌های دیده‌شده پاک شوند؟", "Clear finished workflow records and acknowledged notices?"))) return;
       body = { operation: "clearCompleted" };
-    } else if (operation.startsWith("cancel-")) body = { operation: "cancel", id: operation.slice(7) };
+    } else if (operation.startsWith("ack-")) body = { operation: "acknowledge", id: operation.slice(4) };
+    else if (operation.startsWith("cancel-")) body = { operation: "cancel", id: operation.slice(7) };
     else if (operation !== "refresh") return;
     control.disabled = true;
     await updateWorkflows(body);

@@ -80,13 +80,19 @@ test("private scheduled summaries recover on restart, recur and honor cancellati
     ).status,
     200,
   );
-  const schedule = { operation: "schedule", cadence: "daily", projectId, due: Date.now() + 60_000 };
+  const schedule = {
+    operation: "schedule",
+    cadence: "daily",
+    notify: true,
+    projectId,
+    due: Date.now() + 60_000,
+  };
   assert.equal((await post("workflows", schedule, creator)).status, 404);
   assert.equal((await post("workflows", schedule, { Cookie: member.Cookie })).status, 403);
   const submit = await post("workflows", schedule, member);
   assert.equal(submit.status, 200);
   const [daily] = (await submit.json()).workflows;
-  const onceJob = await post("workflows", { ...schedule, cadence: "once" }, member);
+  const onceJob = await post("workflows", { ...schedule, cadence: "once", notify: false }, member);
   assert.equal(onceJob.status, 200);
   const { id: single } = (await onceJob.json()).workflows.find(({ cadence }) => cadence === "once");
   assert.deepEqual((await (await get(creator)).json()).workflows, []);
@@ -119,6 +125,19 @@ test("private scheduled summaries recover on restart, recur and honor cancellati
   assert.equal(performed.find(({ id }) => id === single).status, "completed");
   const next = performed.find(({ id }) => id === daily.id);
   assert.equal(next.nextDue, date + 86_400_000);
+  const inbox = (await (await get(member)).json()).notifications;
+  assert.equal(inbox.length, 1);
+  assert.deepEqual(inbox[0].result, { total: 1, completed: 1 });
+  assert.deepEqual((await (await get(creator)).json()).notifications, []);
+  const seen = { operation: "acknowledge", id: inbox[0].id };
+  assert.equal((await post("workflows", seen, creator)).status, 404);
+  assert.equal((await post("workflows", seen, member)).status, 200);
+  const seenAt = db.prepare("SELECT acknowledged FROM workspace_notifications WHERE id=?");
+  const originalSeen = seenAt.get(seen.id).acknowledged;
+  assert.ok(originalSeen > 0);
+  assert.equal((await post("workflows", seen, member)).status, 200);
+  assert.equal(seenAt.get(seen.id).acknowledged, originalSeen);
+
   assert.equal(
     (await post("workflows", { operation: "cancel", id: daily.id }, member)).status,
     200,
@@ -128,4 +147,46 @@ test("private scheduled summaries recover on restart, recur and honor cancellati
   const final = (await (await get(member)).json()).workflows.find(({ id }) => id === daily.id);
   assert.equal(final.status, "canceled");
   assert.equal(final.lastRun, next.lastRun);
+  const createTask = async (title) => {
+    const response = await post(
+      "actions",
+      { action: "task.create", input: { projectId, title } },
+      member,
+    );
+    assert.equal(response.status, 200);
+    return (await response.json()).tasks.find((task) => task.title === title).id;
+  };
+  const follow = await createTask("پیگیری واقعی");
+  const skip = await createTask("پیگیری انجام شده");
+  for (const id of [follow, skip]) {
+    assert.equal(
+      (await post("workflows", { ...schedule, cadence: "once", taskId: id, notify: false }, member))
+        .status,
+      200,
+    );
+  }
+  assert.equal(
+    (
+      await post(
+        "actions",
+        { action: "task.setCompleted", input: { projectId, taskId: skip, completed: true } },
+        member,
+      )
+    ).status,
+    200,
+  );
+  await stop();
+  db.prepare("UPDATE workspace_workflows SET next_due=? WHERE status='scheduled'").run(date);
+  await start();
+  const alerts = (await (await get(member)).json()).notifications;
+  assert.deepEqual(
+    alerts.map(({ result }) => result),
+    [{ task: "پیگیری واقعی" }],
+  );
+  await stop();
+  await start();
+  assert.deepEqual((await (await get(member)).json()).notifications, alerts);
+  assert.equal((await post("workflows", { operation: "clearCompleted" }, member)).status, 200);
+  assert.equal(seenAt.get(seen.id), undefined);
+  assert.deepEqual((await (await get(member)).json()).notifications, alerts);
 });

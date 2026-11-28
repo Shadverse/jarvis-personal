@@ -391,7 +391,8 @@ createServer(async (req, res) => {
     if (manageWorkflows) {
       const result = workflows.change(session.userId, body);
       if (!result.error) return json(200, result);
-      if (["project_missing", "workflow_missing"].includes(result.error)) return json(404, result);
+      if (["project_missing", "workflow_missing", "task_missing"].includes(result.error))
+        return json(404, result);
       return json(result.error === "workflow_limit" ? 409 : 400, result);
     }
     if (executeAction) {

@@ -168,6 +168,21 @@ test(
     assert.equal(await acknowledge.count(), 0);
     await action("project-tasks-0").click();
     await page.getByText("وظیفهٔ آزمایشی", { exact: true }).waitFor();
+    await page.locator('[data-action^="workflow-followup-"]').click();
+    const localTomorrow = await page.evaluate(() => {
+      const then = new Date(Date.now() + 86_400_000);
+      return new Date(then.getTime() - then.getTimezoneOffset() * 60_000)
+        .toISOString()
+        .slice(0, 16);
+    });
+    await page.locator("#workflow-due").fill(localTomorrow);
+    const scheduled = page.waitForResponse(
+      (res) => res.url().endsWith("/api/workflows") && res.request().method() === "POST",
+    );
+    await action("workflow-schedule").click();
+    const job = (await (await scheduled).json()).workflows[0];
+    assert.equal(job.taskTitle, "وظیفهٔ آزمایشی");
+    assert.equal(job.status, "scheduled");
     await action("tab-files").click();
     const literal = "<script>untrusted</script> سلام";
     await page.locator("#private-document").setInputFiles({
