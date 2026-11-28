@@ -39,13 +39,22 @@ export function openActions(db) {
   `);
   return {
     list(owner) {
-      return { registry: [createProject, ...tasks.actions], projects: list.all(owner) };
+      return {
+        registry: [createProject, ...tasks.actions],
+        projects: list.all(owner),
+        dueReminders: tasks.due(owner),
+      };
     },
-    listTasks: tasks.list,
+    listTasks(owner, projectId) {
+      const result = tasks.list(owner, projectId);
+      return result.error ? result : { ...result, dueReminders: tasks.due(owner) };
+    },
     execute(owner, body) {
       if (!body || Object.keys(body).length !== 2) return { error: "project_invalid" };
-      if (tasks.actions.some((entry) => entry.id === body.action))
-        return tasks.execute(owner, body);
+      if (tasks.actions.some((entry) => entry.id === body.action)) {
+        const result = tasks.execute(owner, body);
+        return result.error ? result : { ...result, dueReminders: tasks.due(owner) };
+      }
       if (body.action !== createProject.id) return { error: "project_invalid" };
       const input = body.input;
       if (!input || Object.keys(input).length !== 1 || typeof input.name !== "string")
@@ -60,7 +69,12 @@ export function openActions(db) {
       const project =
         insert.get(randomUUID(), owner, name, Date.now(), owner) ?? find.get(owner, name);
       if (!project) return { error: "project_cap" };
-      return { status: "completed", project, projects: list.all(owner) };
+      return {
+        status: "completed",
+        project,
+        projects: list.all(owner),
+        dueReminders: tasks.due(owner),
+      };
     },
   };
 }

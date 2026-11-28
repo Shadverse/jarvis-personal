@@ -2,9 +2,9 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Phase H · Local integration grants
+**Active milestone** Phase I · Private task reminders
 
-**Latest verified remote checkpoint before Phase H** `e3a0e5ec661ea166af3d24d606309f951ed9e51e`
+**Latest verified remote checkpoint before Phase I** `72b5020e4923de9ef4ccfa96b711147d4a474703`
 
 **Phase A live acceptance** PENDING. The Phase A checkpoint is on the remote branch.
 **Graphics** Frozen. The current interface and isolated hologram preview are retained.
@@ -37,7 +37,8 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | G–I | Automatic, device and scheduled execution | MISSING | No assistant-driven execution, device companion or scheduler. |
 | H | Local Workspace connector grants | VERIFIED LOCAL | One read-only account-scoped connector has a 15-minute grant, explicit revocation, and usage count. The fixture checked denial of unapproved scopes and connectors. |
 | H | Email, calendar, web search, GitHub, cloud storage, messaging, APIs and MCP integrations | DISABLED | Catalog entries are unavailable. Official provider authorization, external adapters and credentials are pending. |
-| I | Reminders, schedules, workflows, triggers, job execution and recovery, cancellation, notifications, audit and emergency stop | MISSING | No product job subsystem. Existing OpenClaw scheduling has no SHADVERSE admission or lifecycle integration. |
+| I | Private task reminders | VERIFIED LOCAL | One cancellable deadline per task, with due reminders queried in the signed-in project workspace. Ownership, time boundaries and suppression on completion passed the targeted API fixture. |
+| I | Autonomous scheduler, workflows, triggers, worker recovery, outbound notifications and emergency stop | MISSING | No background execution subsystem or SHADVERSE admission for upstream scheduling. |
 | J | Creator role, read-only directory and operator registration codes and revocation | PARTIALLY IMPLEMENTED | Creator and member roles are present. Operator commands and the directory cover limited administration. |
 | J | Administrator role, suspension, provider and permission management, usage, spend, audit, security monitoring and emergency controls | MISSING | Product enforcement and administrative operations are absent. |
 | K | Free, Pro and Ultra monthly and annual presentation | MOCKED | Displayed tier offers have no entitlements or checkout. |
@@ -111,3 +112,10 @@ The follow-up checkpoint adds Workspace → Projects → Tasks. It supports crea
 Monitor & Tools exposes a SHADVERSE Workspace connector that reads only the signed-in account’s project count. A 15-minute grant requires explicit consent. Revocation is immediate on the server. The API returns credential-free metadata, last use and a cumulative count, and leaves every external connector unavailable. One synthetic HTTP test checked expiry, revocation, ownership, CSRF, narrow scope, absence of a synthetic external connection and correct read accounting. Browser controls await private staging acceptance.
 
 **Next independent milestone.** In Phase I, add an account-scoped reminder for an existing project task. Store its due time, expose explicit create and cancel controls, and surface due reminders on the authenticated Workspace page. Verify ownership, deterministic clock behavior and cancellation locally before adding any worker or outbound notification.
+
+
+## Phase I checkpoint
+
+Authenticated users can set or cancel one reminder for a task in their own project. The server accepts a future timestamp within 366 days and persists it as an epoch in milliseconds. A due reminder appears in Projects when the view loads or task data refreshes. A completed task suppresses its reminder. Reopening restores the reminder unless it was canceled. No worker, external notification, provider call or unattended action runs. The isolated HTTP fixture covered separate accounts, a future timestamp, a deterministic overdue record, completed-task suppression, and cancellation. Browser date entry awaits private staging acceptance.
+
+**Exact continuation.** Add an owner-scoped, idempotent acknowledgement operation to the due-reminder view. Store acknowledgement with the deadline so rescheduling clears it. Then test two accounts, refresh persistence and repeated acknowledgements against one temporary database. Keep outbound notifications disabled until their separate consent and retry controls are implemented.

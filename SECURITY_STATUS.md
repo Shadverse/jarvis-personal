@@ -12,6 +12,7 @@
 | Local artifact exports | Printable HTML escapes user text and blocks script and network access with a document CSP. CSV cells are quoted and spreadsheet formula prefixes are neutralized. The browser creates these files from explicit workspace data. |
 | Workspace actions | The allowlisted actions require CSRF for project creation and task creation or completion. Queries and mutations enforce account ownership. The task action also scopes every task ID to its project. The registry accepts no command, destination, caller-supplied owner or model-generated execution. |
 | Workspace integration grants | The connector grants one account-owned, 15-minute read scope for that account’s project count. Scope and expiry are enforced in the same statement as usage accounting. Revocation blocks future reads. There is no third-party request or credential. |
+| Task reminders | Signed-in account and project scope apply to every reminder creation, cancellation or due list. Reminders use bounded timestamps and passive Workspace display. No background job or external dispatch is enabled. |
 | Commercial isolation | DISABLED FOR SECURITY. No commercial account can route through the Creator Gateway. Independent runtime, storage and credential isolation requires live acceptance before activation. |
 | Provider grants and billing | Provider configuration requires official verified grants. No paid services or real billing are authorized. |
 | Production | Deployment, public Gateway access, production DB changes and infrastructure changes remain gated. |

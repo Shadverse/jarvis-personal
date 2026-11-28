@@ -48,6 +48,7 @@ let projects = [],
   projectsLoaded = false,
   projectIds = new Map(),
   taskView = null,
+  dueReminders = [],
   activeProject = "",
   notes = [],
   personalNotes = null,
@@ -78,6 +79,7 @@ function clearWorkspace() {
   projectsLoaded = false;
   projectIds.clear();
   taskView = null;
+  dueReminders = [];
   connectorState = null;
   connectorBusy = false;
   activeProject = "";
@@ -301,14 +303,30 @@ function listItems() {
     )
     .join("");
 }
+const reminderDate = (value) =>
+  new Intl.DateTimeFormat(lang, { dateStyle: "medium", timeStyle: "short" }).format(value);
+function remindersSection() {
+  if (!privateProjects() || !dueReminders.length) return "";
+  return `<section class="surface stack">
+    <h3>${t("یادآورهای سررسیدشده", "Due reminders")}</h3>
+    ${dueReminders.map(({ project, title, due }) => `<div class="work-row"><bdi>${safe(project)} · ${safe(title)}</bdi><bdi>${safe(reminderDate(due))}</bdi></div>`).join("")}
+  </section>`;
+}
 function projectTasks() {
   if (!privateProjects() || !taskView) return "";
-  const { name, tasks, busy, error, input } = taskView;
+  const { name, tasks, busy, error, input, reminderId, reminderInput } = taskView;
   const rows = tasks.map((task) => {
     const completed = task.completed !== null;
     return `<div class="work-row"><bdi>${safe(task.title)}</bdi>
       <span>${completed ? t("انجام شد", "Completed") : t("باز", "Open")}</span>
-      ${button("task-toggle-" + task.id, completed ? t("بازگشایی", "Reopen") : t("تکمیل", "Complete"), "outline")}</div>`;
+      ${task.due === null ? "" : `<bdi>${safe(reminderDate(task.due))}</bdi>`}
+      ${button("task-toggle-" + task.id, completed ? t("بازگشایی", "Reopen") : t("تکمیل", "Complete"), "outline")}
+      ${completed ? "" : button("reminder-edit-" + task.id, t("تنظیم یادآور", "Set reminder"))}
+      ${task.due === null ? "" : button("reminder-cancel-" + task.id, t("لغو یادآور", "Cancel reminder"))}</div>
+      ${reminderId !== task.id || completed ? "" : `<div class="controls">
+      <label class="field"><input id="reminder-due" type="datetime-local" value="${safe(reminderInput)}" aria-label="${t("زمان محلی یادآور", "Reminder local time")}"></label>
+      ${button("reminder-save", t("ذخیرهٔ یادآور", "Save reminder"))}
+      ${button("reminder-close", t("انصراف", "Close reminder editor"))}</div>`}`;
   }).join("");
   return `<section class="surface stack" aria-busy="${busy}">
     <h3>${t("وظایف پروژه", "Project tasks")} · <bdi>${safe(name)}</bdi></h3>
@@ -340,7 +358,7 @@ function space() {
    ${documentPreview ? `<label class="field"><bdi>${safe(documentPreview.name)}</bdi>
       <textarea readonly rows="8" dir="auto" aria-label="${t("متن فایل", "File contents")}">${safe(documentPreview.text)}</textarea></label>` : ""}`
    : ["files", "gallery"].includes(tab) ? `<input type="file" id="workspace-file" multiple hidden ${tab === "gallery" ? 'accept="image/png,image/jpeg,image/webp"' : ""}>${button("pick-file", icon("attach") + t("انتخاب فایل محلی", "Choose local file"))}` : ""}
- <div id="results">${listItems()}</div></section>${projectTasks()}`
+ <div id="results">${listItems()}</div></section>${remindersSection()}${projectTasks()}`
   );
 }
 function workspaceConnector() {
@@ -480,6 +498,8 @@ function errorText(code) {
     integration_scope: t("مجوز این اتصال فعال نیست.", "Connector permission is inactive."),
     integration_invalid: t("درخواست اتصال معتبر نیست.", "Invalid connector request."),
     project_missing: t("پروژه در حساب شما پیدا نشد.", "This project was not found in your account."),
+    reminder_invalid: t("زمانی در آینده و حداکثر تا یک سال دیگر انتخاب کنید.", "Choose a future time within the next year."),
+    task_closed: t("یادآور فقط برای وظیفهٔ باز تنظیم می‌شود.", "Reminders can be scheduled for open tasks."),
     task_missing: t("این وظیفه در پروژه پیدا نشد.", "This task was not found in the project."),
     task_invalid: t("عنوان معتبر وظیفه را وارد کنید.", "Enter a valid task title."),
     task_cap: t("حداکثر ۱۰۰ وظیفه در هر پروژه مجاز است.", "Each project can hold up to 100 tasks."),
@@ -678,7 +698,9 @@ async function updateProjects(name, control) {
   if (control) control.disabled = true;
   try {
     const result = await api("actions", name ? { action: "project.create", input: { name } } : undefined);
-    if (session !== requester || (!name && projectsLoaded)) return;
+    if (session !== requester) return;
+    if (!name && projectsLoaded && !privateProjects()) return;
+    dueReminders = result.dueReminders;
     projects = result.projects.map((project) => project.name);
     projectIds = new Map(result.projects.map((project) => [project.name, project.id]));
     projectsLoaded = true;
@@ -712,6 +734,11 @@ async function updateTasks(action, fields) {
       : await api("actions?project=" + encodeURIComponent(view.id));
     if (session !== requester || taskView !== view) return;
     view.tasks = result.tasks;
+    dueReminders = result.dueReminders;
+    if (action === "task.setReminder") {
+      view.reminderId = null;
+      view.reminderInput = "";
+    }
     if (action === "task.create" && view.input.trim() === fields.title) view.input = "";
   } catch (error) {
     if (session !== requester || taskView !== view) return;
@@ -867,7 +894,7 @@ app.addEventListener("click", async (event) => {
     const name = workspaceItems()[Number(action.slice("project-tasks-".length))]?.name;
     const id = projectIds.get(name);
     if (id && taskView?.id !== id) {
-      taskView = { id, name, tasks: [], busy: false, error: "", input: "" };
+      taskView = { id, name, tasks: [], busy: false, error: "", input: "", reminderId: null, reminderInput: "" };
       await updateTasks();
     }
     return;
@@ -876,6 +903,33 @@ app.addEventListener("click", async (event) => {
     if (action === "tasks-close") {
       taskView = null;
       render();
+      return;
+    }
+    if (action === "reminder-close") {
+      taskView.reminderId = null;
+      render();
+      return;
+    }
+    if (action === "reminder-save" && taskView.reminderId) {
+      const due = new Date(taskView.reminderInput).getTime();
+      if (!Number.isSafeInteger(due)) {
+        taskView.error = errorText("reminder_invalid");
+        render();
+      } else await updateTasks("task.setReminder", { taskId: taskView.reminderId, due });
+      return;
+    }
+    const reminderAction = /^reminder-(edit|cancel)-([a-f0-9-]{36})$/.exec(action);
+    if (reminderAction) {
+      const task = taskView.tasks.find(({ id }) => id === reminderAction[2]);
+      if (!task) return;
+      if (reminderAction[1] === "cancel") {
+        await updateTasks("task.setReminder", { taskId: task.id, due: null });
+      } else {
+        taskView.reminderId = task.id;
+        taskView.reminderInput = "";
+        render();
+        app.querySelector("#reminder-due")?.focus();
+      }
       return;
     }
     if (action === "task-add") {
@@ -1047,13 +1101,14 @@ app.addEventListener("click", async (event) => {
   }
   render();
   if (action === "monitor" && session && !review) void updateConnector();
-  if (privateProjects() && !projectsLoaded) void updateProjects();
+  if (privateProjects() && (!projectsLoaded || ["workspace", "tab-projects"].includes(action))) void updateProjects();
   if (personalMemory() && personalNotes === null) void loadPersonalMemory();
   if (personalDocuments() && privateDocuments === null) void updateDocuments();
 });
 app.addEventListener("input", (event) => {
   if (event.target.id === "draft") draft = event.target.value;
   if (event.target.id === "task-title" && taskView) taskView.input = event.target.value;
+  if (event.target.id === "reminder-due" && taskView) taskView.reminderInput = event.target.value;
   if (event.target.id === "search") {
     query = event.target.value;
     app.querySelector("#results").innerHTML = listItems();

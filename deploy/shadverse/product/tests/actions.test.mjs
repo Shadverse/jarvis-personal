@@ -9,7 +9,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { addUser, invite, openStore } from "../auth.mjs";
 
-test("private projects and tasks enforce explicit actions, quotas, and ownership", async (t) => {
+test("private projects, tasks and reminders enforce explicit actions, quotas, and ownership", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "jarvis-actions-"));
   const db = openStore(dir);
   const password = randomUUID();
@@ -88,7 +88,7 @@ test("private projects and tasks enforce explicit actions, quotas, and ownership
   assert.deepEqual(other.projects, []);
   assert.deepEqual(
     other.registry.map((entry) => entry.id),
-    ["project.create", "task.create", "task.setCompleted"],
+    ["project.create", "task.create", "task.setCompleted", "task.setReminder"],
   );
   assert.equal((await post("logout", {}, member)).status, 200);
   assert.equal((await get(member)).status, 401);
@@ -146,4 +146,39 @@ test("private projects and tasks enforce explicit actions, quotas, and ownership
     restored,
   );
   assert.deepEqual((await reopened.json()).tasks, [task]);
+  const future = Date.now() + 86400_000;
+  const setReminder = (due) => ({
+    action: "task.setReminder",
+    input: { projectId, taskId: task.id, due },
+  });
+  assert.equal((await post("actions", setReminder(future), creator)).status, 404);
+  assert.equal((await post("actions", setReminder(1), restored)).status, 400);
+  const reminder = await post("actions", setReminder(future), restored);
+  assert.equal(reminder.status, 200);
+  const scheduled = await reminder.json();
+  assert.equal(scheduled.tasks[0].due, future);
+  assert.deepEqual(scheduled.dueReminders, []);
+  const write = openStore(dir);
+  try {
+    write.prepare("UPDATE project_task_reminders SET due=? WHERE task_id=?").run(1, task.id);
+  } finally {
+    write.close();
+  }
+  const due = (await (await get(restored)).json()).dueReminders;
+  assert.deepEqual(due, [{ id: task.id, title: task.title, projectId, project: name, due: 1 }]);
+  assert.deepEqual((await (await get(creator)).json()).dueReminders, []);
+  assert.deepEqual((await (await post("actions", complete, restored)).json()).dueReminders, []);
+  assert.equal((await post("actions", setReminder(future), restored)).status, 409);
+  const canceled = await post("actions", setReminder(null), restored);
+  assert.equal(canceled.status, 200);
+  assert.equal((await canceled.json()).tasks[0].due, null);
+  const afterCancel = await post(
+    "actions",
+    {
+      ...complete,
+      input: { ...complete.input, completed: false },
+    },
+    restored,
+  );
+  assert.deepEqual((await afterCancel.json()).dueReminders, []);
 });
