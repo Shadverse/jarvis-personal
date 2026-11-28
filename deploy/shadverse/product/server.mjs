@@ -27,12 +27,14 @@ import { createModelRegistry, loadModelPolicy, readUsage } from "./models.mjs";
 import { openResearch } from "./research.mjs";
 import { visionBodyLimit } from "./vision-image.mjs";
 import { openVision } from "./vision.mjs";
+import { openWorkflows } from "./workflows.mjs";
 process.umask(0o077);
 const db = openStore(process.env.JARVIS_STATE);
 const conversations = openConversations(db);
 const documentProcessor = await loadDocumentProcessor();
 const documents = openDocuments(db, documentProcessor);
 const actions = openActions(db);
+const workflows = openWorkflows(db);
 const actionIntents = openActionIntents(actions);
 const memory = openMemory(db);
 const integrations = openIntegrations(db);
@@ -113,6 +115,15 @@ function lookupContext(session, options, message) {
     gateway.token,
   );
 }
+function runLocalWorkflows() {
+  try {
+    workflows.tick();
+  } catch {
+    console.error("Local workflow cycle failed; scheduled work will remain eligible for retry.");
+  }
+}
+runLocalWorkflows();
+setInterval(runLocalWorkflows, 15_000).unref();
 let pending = 0;
 let chatPending = false;
 createServer(async (req, res) => {
@@ -167,6 +178,7 @@ createServer(async (req, res) => {
           return json(400, { error: "invalid" });
         return json(200, conversations.page(session.userId, before));
       }
+      if (path === "/api/workflows") return json(200, workflows.snapshot(session.userId));
       if (path === "/api/integrations") return json(200, integrations.list(session.userId));
       if (path === "/api/actions") {
         const projectId = url.searchParams.get("project");
@@ -270,6 +282,7 @@ createServer(async (req, res) => {
     const previewMemory = path === "/api/memory/context";
     const manageDocuments = path === "/api/documents";
     const executeAction = path === "/api/actions";
+    const manageWorkflows = path === "/api/workflows";
     const manageIntegrations = path === "/api/integrations";
     if (
       chat ||
@@ -280,6 +293,7 @@ createServer(async (req, res) => {
       previewMemory ||
       manageDocuments ||
       executeAction ||
+      manageWorkflows ||
       manageIntegrations ||
       path === "/api/logout"
     ) {
@@ -373,6 +387,12 @@ createServer(async (req, res) => {
     if (manageIntegrations) {
       const result = integrations.execute(session.userId, body);
       return json(result.error === "integration_scope" ? 403 : result.error ? 400 : 200, result);
+    }
+    if (manageWorkflows) {
+      const result = workflows.change(session.userId, body);
+      if (!result.error) return json(200, result);
+      if (["project_missing", "workflow_missing"].includes(result.error)) return json(404, result);
+      return json(result.error === "workflow_limit" ? 409 : 400, result);
     }
     if (executeAction) {
       const result =

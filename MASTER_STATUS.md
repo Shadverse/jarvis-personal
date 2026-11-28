@@ -2,7 +2,7 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Functional completion · Research, actions and devices
+**Active milestone** Functional completion · Local workflows and scoped integration
 
 **Verified remote baseline for live integration** `320c5619f2cfa1510453bf362f17d3e31487f5d7`
 
@@ -39,11 +39,11 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | G | Existing private OpenClaw tool and paired-device access | PARTIALLY IMPLEMENTED | The upstream operator path is separate. There is no product permission layer for application launching, files, browser actions, commands, desktop companion, mobile actions or external tools. |
 | G | Account-scoped project creation and listing | VERIFIED LOCAL | Workspace registers one explicit local action. Isolation, limits, CSRF and idempotent creation passed the HTTP fixture. |
 | G–I | Private project tasks | VERIFIED LOCAL | The API fixture checked explicit creation, completion and reopening, with project and account isolation. |
-| G–I | Automatic, device and scheduled execution | MISSING | No assistant-driven execution, device companion or scheduler. |
+| G–I | Device execution and Windows pairing | PENDING IMPLEMENTATION | Local action review exists. A scoped device adapter and approved paired runtime remain pending. |
 | H | Local Workspace connector grants | VERIFIED LOCAL | One read-only account-scoped connector has a 15-minute grant, explicit revocation, and usage count. The fixture checked denial of unapproved scopes and connectors. |
 | H | Email, calendar, web search, GitHub, cloud storage, messaging, APIs and MCP integrations | DISABLED | Catalog entries are unavailable. Official provider authorization, external adapters and credentials are pending. |
 | I | Private task reminders | VERIFIED LOCAL | One cancellable deadline per task with persistent acknowledgement. A repeated acknowledgement preserves its timestamp; rescheduling resets it. The local API fixture verified account isolation and stale-deadline rejection. |
-| I | Autonomous scheduler, workflows, triggers, worker recovery, outbound notifications and emergency stop | MISSING | No background execution subsystem or SHADVERSE admission for upstream scheduling. |
+| I | Scheduled one-time and recurring project summaries | VERIFIED LOCAL | Persistent timer and startup recovery, account pause, cancellation, and latest result. External workflows and notification delivery remain unavailable. |
 | J | Creator role, read-only directory and operator registration codes and revocation | PARTIALLY IMPLEMENTED | Creator and member roles are present. Operator commands and the directory cover limited administration. |
 | J | Administrator role, suspension, provider and permission management, usage, spend, audit, security monitoring and emergency controls | MISSING | Product enforcement and administrative operations are absent. |
 | K | Free, Pro and Ultra monthly and annual presentation | MOCKED | Displayed tier offers have no entitlements or checkout. |
@@ -184,4 +184,8 @@ The Creator Research view can retrieve bounded structured citations and read lis
 
 Authenticated users can ask the composer to review a bounded Persian or English request to create a project, add a task to an owned project, or open an HTTPS site in their browser. The server returns a preview and scopes write approval to the session and a two-minute lifetime. A confirmation is single-use. Project ownership and quotas are enforced by the existing action registry at execution. Direct shell, privileged tools and device routing remain disabled. The HTTP integration test covered no write before approval, replay, cancellation, unauthorized project and cross-session denial.
 
-**Next milestone.** Define the paired-device identity and per-command grant boundary using OpenClaw's documented node protocol, with no real devices or credentials until Creator approval. Advance the independent local recurring-workflow path while live pairing and external connectors remain deferred.
+## Local workflow checkpoint
+
+Workspace → Projects can schedule an owned project's task summary once, or every 24 hours from the selected start time. The in-process scheduler checks at startup and periodically. Read and publication share a SQLite transaction. Overdue recurring schedules catch up once after a restart and resume their original cadence. The account can pause pending work, cancel a schedule, or clear completed history. Each job retains its latest local result. Restart tests verified account isolation, pauses and resumed writes using the same application database. No external action, inference or notification is scheduled.
+
+**Continuation.** Extend the same local scheduler with an explicitly enabled task-follow-up notification and an account-scoped inbox with idempotent acknowledgement. Then define the OpenClaw node identity and per-command grant boundary for an approved paired runtime. Creative media providers, external connectors, skills activation, full administration and commercial isolation remain open. Staging, physical devices and provider acceptance remain deferred.

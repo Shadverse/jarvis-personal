@@ -62,6 +62,7 @@ let projects = [],
   rankedMemory = null,
   includeEarlierQuestions = false,
   actionPlan = null,
+  workflowState = null,
   editingNote = null,
   privateDocuments = null,
   documentFormats = { read: [], write: [] },
@@ -105,6 +106,7 @@ function clearWorkspace() {
   rankedMemory = null;
   includeEarlierQuestions = false;
   actionPlan = null;
+  workflowState = null;
   editingNote = null;
   privateDocuments = null;
   documentFormats = { read: [], write: [] };
@@ -419,6 +421,38 @@ function projectTasks() {
     ${error ? `<p role="status">${safe(error)}</p>` : ""}
     ${rows || (!busy && !error ? `<p class="empty">${t("هنوز وظیفه‌ای ثبت نشده است.", "No tasks yet.")}</p>` : "")}</section>`;
 }
+function workflowPanel() {
+  if (!privateProjects()) return "";
+  if (!workflowState) return button("workflow-open", t("خلاصه‌های زمان‌بندی‌شده", "Scheduled summaries"));
+  const stateText = {
+    scheduled: t("زمان‌بندی‌شده", "Scheduled"),
+    completed: t("انجام‌شده", "Completed"),
+    canceled: t("لغوشده", "Canceled"),
+  };
+  return `<section class="surface stack">
+    <h3>${t("خلاصه‌های زمان‌بندی‌شدهٔ پروژه", "Scheduled project summaries")}</h3>
+    <div class="controls">
+      <label>${t("پروژه", "Project")} <select id="workflow-project">
+        ${projects.map((name) => `<option value="${safe(projectIds.get(name))}" ${name === activeProject ? "selected" : ""}>${safe(name)}</option>`).join("")}
+      </select></label>
+      <label class="field"><input id="workflow-due" type="datetime-local" aria-label="${t("زمان شروع", "Start time")}"></label>
+      <select id="workflow-cadence" aria-label="${t("تکرار", "Repeat")}" >
+        <option value="once">${t("یک‌بار", "Once")}</option>
+        <option value="daily">${t("هر ۲۴ ساعت", "Every 24 hours")}</option>
+      </select>
+      ${button("workflow-schedule", t("زمان‌بندی خلاصه", "Schedule summary"), "outline", !projects.length)}
+      ${button("workflow-refresh", t("تازه‌سازی", "Refresh"))}
+      ${button("workflow-pause", workflowState.paused ? t("ازسرگیری اجرا", "Resume jobs") : t("توقف اجرا", "Pause jobs"))}
+      ${workflowState.workflows.some(({ status }) => status !== "scheduled") ? button("workflow-clear", t("پاک‌کردن سوابق پایان‌یافته", "Clear finished history")) : ""}
+    </div>
+    ${workflowState.paused ? `<p>${t("اجرای خودکار برای این حساب متوقف است.", "Background execution is paused for this account.")}</p>` : ""}
+    ${workflowState.workflows.map((job) => `<div class="work-row"><bdi>${safe(job.name)} · ${stateText[job.status]}</bdi>
+      ${job.nextDue === null ? "" : `<bdi>${safe(reminderDate(job.nextDue))}</bdi>`}
+      ${job.result ? `<bdi>${t("آخرین خلاصه", "Latest summary")} · ${job.result.completed} / ${job.result.total} ${t("انجام‌شده", "completed")}</bdi>` : ""}
+      ${job.status === "scheduled" ? button("workflow-cancel-" + job.id, t("لغو", "Cancel")) : ""}
+    </div>`).join("")}
+  </section>`;
+}
 function documentFindings(results) {
   return results.map(({ name, passages, tables, truncated, image }) => `<section class="stack">
     <h3><bdi>${safe(name)}</bdi></h3>
@@ -474,7 +508,7 @@ function space() {
    ${button("document-upload", icon("attach") + t("ذخیرهٔ فایل خصوصی", "Save private file"))}`}
    ${documentPanel()}`
    : ["files", "gallery"].includes(tab) ? `<input type="file" id="workspace-file" multiple hidden ${tab === "gallery" ? 'accept="image/png,image/jpeg,image/webp"' : ""}>${button("pick-file", icon("attach") + t("انتخاب فایل محلی", "Choose local file"))}` : ""}
- <div id="results">${listItems()}</div></section>${remindersSection()}${projectTasks()}`
+ <div id="results">${listItems()}</div></section>${remindersSection()}${projectTasks()}${workflowPanel()}`
   );
 }
 function workspaceConnector() {
@@ -625,6 +659,9 @@ function errorText(code) {
     task_missing: t("این وظیفه در پروژه پیدا نشد.", "This task was not found in the project."),
     task_invalid: t("عنوان معتبر وظیفه را وارد کنید.", "Enter a valid task title."),
     task_cap: t("حداکثر ۱۰۰ وظیفه در هر پروژه مجاز است.", "Each project can hold up to 100 tasks."),
+    workflow_invalid: t("پروژه و زمان آیندهٔ معتبر انتخاب کنید.", "Choose a project and a valid future time."),
+    workflow_missing: t("زمان‌بندی در دسترس نیست.", "This schedule is unavailable."),
+    workflow_limit: t("سهمیهٔ زمان‌بندی پر شده است.", "Your schedule limit is full."),
     intent_invalid: t("درخواست پشتیبانی‌شده بنویسید؛ مانند «ساخت پروژه نمونه»، «ساخت وظیفه گزارش» یا «باز کردن سایت https://example.org».", "Try ‘create project Example’, ‘add task Report’, or ‘open website https://example.org’."),
     intent_missing: t("مهلت اقدام پایان یافته است؛ دوباره بازبینی کنید.", "The action expired. Review it again."),
     project_invalid: t("نام معتبر پروژه را وارد کنید.", "Enter a valid project name."),
@@ -931,6 +968,19 @@ async function updateTasks(action, fields) {
     }
   }
 }
+async function updateWorkflows(body) {
+  const requester = session;
+  try {
+    const result = await api("workflows", body);
+    if (session !== requester || !privateProjects()) return;
+    workflowState = result;
+  } catch (error) {
+    if (session !== requester || !privateProjects()) return;
+    if (error.message === "auth") returnToGate();
+    else feedback = errorText(error.message);
+  }
+  if (session === requester && privateProjects()) render();
+}
 async function loadWorkspaceMemory() {
   const requester = session;
   const projectId = memoryScope();
@@ -1221,6 +1271,34 @@ app.addEventListener("click", async (event) => {
     } else if (noteAction[1] === "delete" && confirm(t("این یادداشت حذف شود؟", "Delete this note?"))) {
       await changeWorkspaceMemory({ operation: "delete", id: note.id }, control);
     }
+    return;
+  }
+  if (privateProjects() && action === "workflow-open") {
+    control.disabled = true;
+    await updateWorkflows();
+    return;
+  }
+  if (privateProjects() && workflowState && action.startsWith("workflow-")) {
+    const operation = action.slice(9);
+    let body;
+    if (operation === "schedule") {
+      const date = new Date(app.querySelector("#workflow-due").value).getTime();
+      if (!Number.isSafeInteger(date)) {
+        feedback = errorText("workflow_invalid");
+        app.querySelector(".notice").textContent = feedback;
+        return;
+      }
+      body = { operation, projectId: app.querySelector("#workflow-project").value,
+        cadence: app.querySelector("#workflow-cadence").value, due: date };
+    } else if (operation === "pause") body = { operation, paused: !workflowState.paused };
+    else if (operation === "clear") {
+      if (!confirm(t("سوابق پایان‌یافته پاک شوند؟", "Clear finished workflow records?"))) return;
+      body = { operation: "clearCompleted" };
+    } else if (operation.startsWith("cancel-")) body = { operation: "cancel", id: operation.slice(7) };
+    else if (operation !== "refresh") return;
+    control.disabled = true;
+    await updateWorkflows(body);
+    if (control.isConnected) control.disabled = false;
     return;
   }
   if (privateProjects() && action.startsWith("project-tasks-")) {

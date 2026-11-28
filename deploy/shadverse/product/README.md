@@ -109,3 +109,5 @@ OPENCLAW_VITEST_RUNTIME=node node scripts/run-vitest.mjs \
 SHADVERSE © · OpenClaw MIT attribution and the bundled font licenses are included in web/.
 
 JARVIS Vision holds one selected frame locally. Inference is disabled by default. Follow [Restricted vision staging](VISION_STAGING.md) before enabling it.
+
+**Scheduled summaries** in Workspace → Projects produces a private once-only or recurring completed-task count. The product checks for due schedules at startup and every 15 seconds while running. A recurring schedule runs once on recovery and resumes its 24-hour cadence. Pause and cancel are account-scoped. The latest result is displayed in the same Workspace panel.
