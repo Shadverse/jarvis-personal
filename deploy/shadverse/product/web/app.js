@@ -1,4 +1,5 @@
 import lensMap from "./art/glass-normal.png";
+import { draftDocument, notesCsv } from "./artifacts.js";
 import { energyCore, voiceStates } from "./core.js";
 import { icon } from "./icons.js";
 import { Signal } from "./identity/audio.js";
@@ -245,6 +246,14 @@ function syncVoice() {
 }
 const personalMemory = () => Boolean(session && !review && page === "workspace" && tab === "memory" && !activeProject);
 const personalDocuments = () => Boolean(session && !review && page === "workspace" && tab === "files" && !activeProject);
+function downloadArtifact(content, type, filename) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 function workspaceItems() {
   if (tab === "projects") return projects.map((name) => ({ name }));
   if (personalMemory()) return (personalNotes ?? []).map((note) => ({ ...note, name: note.text }));
@@ -275,7 +284,8 @@ function listItems() {
             ? button("document-view-" + item.id, t("پیش‌نمایش", "Preview"), "outline") +
               `<a class="outline" href="/api/documents?id=${encodeURIComponent(item.id)}">${t("دریافت", "Download")}</a>` +
               button("document-delete-" + item.id, t("حذف", "Delete"), "outline")
-            : tab === "history" || tab === "projects" ? button("open-item-" + i, icon("arrow") + t("باز کردن", "Open"), "outline") : ""}</div>`,
+            : tab === "history" || tab === "projects" ? button("open-item-" + i, icon("arrow") + t("باز کردن", "Open"), "outline") : ""}
+          ${tab === "history" ? button("draft-export-" + i, t("دریافت سند", "Download document"), "outline") : ""}</div>`,
     )
     .join("");
 }
@@ -294,7 +304,8 @@ function space() {
  <select id="project-filter" aria-label="${t("پروژهٔ انتخابی", "Active project")}"><option value="">${t("همهٔ پروژه‌ها", "All projects")}</option>${projects.map((n) => `<option ${n === activeProject ? "selected" : ""}>${safe(n)}</option>`).join("")}</select></div>
  ${add ? `<div class="controls"><label class="field"><input id="item-name" dir="auto" maxlength="500" value="${safe(editing?.text ?? "")}" placeholder="${tab === "projects" ? t("نام پروژه", "Project name") : t("یادداشت حافظه", "Memory note")}" aria-label="${label(tab)}"></label>${button("add-item", icon("layers") + (editing ? t("ذخیره", "Save") : t("افزودن", "Add")))}
  ${editing ? button("memory-cancel", t("انصراف", "Cancel"), "outline") : ""}
- ${personalMemory() ? `<a href="/api/memory?export=1" class="outline">${t("خروجی حافظه", "Export memory")}</a>` : ""}</div>` : ""}
+ ${personalMemory() ? `<a href="/api/memory?export=1" class="outline">${t("خروجی حافظه", "Export memory")}</a>
+   ${personalNotes?.length ? button("memory-csv", t("دریافت جدول CSV", "Download CSV"), "outline") : ""}` : ""}</div>` : ""}
  ${personalDocuments() ? `<input type="file" id="private-document" accept=".txt,.md,.csv" hidden>
    ${button("document-upload", icon("attach") + t("ذخیرهٔ فایل خصوصی", "Save private file"))}
    ${documentPreview ? `<label class="field"><bdi>${safe(documentPreview.name)}</bdi>
@@ -691,6 +702,15 @@ app.addEventListener("click", async (event) => {
       control.disabled = true;
       await updateDocuments({ operation: operation[1], id: operation[2] });
     }
+    return;
+  }
+  if (action.startsWith("draft-export-") && page === "workspace" && tab === "history") {
+    const item = workspaceItems()[Number(action.slice("draft-export-".length))];
+    if (item) downloadArtifact(draftDocument(item.name, lang), "text/html;charset=utf-8", "jarvis-draft.html");
+    return;
+  }
+  if (action === "memory-csv" && personalMemory() && personalNotes?.length) {
+    downloadArtifact(notesCsv(personalNotes, lang), "text/csv;charset=utf-8", "jarvis-notes.csv");
     return;
   }
   if (personalMemory() && action.startsWith("memory-")) {

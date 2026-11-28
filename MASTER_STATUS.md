@@ -2,9 +2,9 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Phase E · Private text-document intake
+**Active milestone** Phase F · Local document and spreadsheet exports
 
-**Latest verified remote checkpoint before Phase E** `ba1f0cbb561f3941073d4fc3d4fee2d4ab4bda21`
+**Latest verified remote checkpoint before Phase F** `f5f6d70fcdfa4023549af9525d57225a6d52ae81`
 
 **Phase A live acceptance** PENDING. The Phase A checkpoint is on the remote branch.
 **Graphics** Frozen. The current interface and isolated hologram preview are retained.
@@ -29,7 +29,8 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | E | Attachment selection and local image thumbnails | PARTIALLY IMPLEMENTED | Local selection and preview exist. The product rejects inference requests with attachments. |
 | E | Private TXT, Markdown and CSV storage, plain-text preview, download and deletion | VERIFIED LOCAL | The signed-in product API fixture checked exact downloaded bytes, UTF-8 and filename validation, size enforcement, CSRF and cross-account denial. |
 | E | Document inference, PDFs, structured spreadsheets, vision, camera, voice and visual search | MISSING | Existing Creator-wide tool authority makes untrusted-file inference a separate restricted-adapter milestone. |
-| F | Provider-backed image, video, audio and music creation, documents, presentations, spreadsheets and downloadable artifacts | MISSING | Product capability catalog and generation adapters are absent. |
+| F | Printable draft documents and personal-note spreadsheets | VERIFIED LOCAL | Standalone HTML and UTF-8 CSV generated in the browser from explicit workspace data. Output escaping and CSV protection passed the local artifact test. |
+| F | Provider-backed image, video, audio, music, presentations and document generation | MISSING | Product capability catalog and generation adapters are absent. |
 | G | Existing private OpenClaw tool and paired-device access | PARTIALLY IMPLEMENTED | The upstream operator path is separate. There is no product permission layer for application launching, files, browser actions, commands, desktop companion, mobile actions or external tools. |
 | G | Project and task management | PARTIALLY IMPLEMENTED | Project and note interactions live in page memory. Durable task execution and management are absent. |
 | H | Email, calendar, web search, GitHub, cloud storage, messaging, APIs and MCP integrations | MISSING | Product connector authorization, scoped accounts and permission UI are absent. |
@@ -83,3 +84,10 @@ Signed-in users can save, search, edit, delete and export their own explicit not
 Signed-in Workspace → Files supports explicit UTF-8 text upload, literal preview, download and confirmed delete. Account identity scopes all file operations. The store enforces 1 MiB per file, 50 files and 10 MiB per account. Files are stored as bytes with generated IDs and are never executed or dispatched to inference. The targeted HTTP test passed, including denial of invalid filenames, invalid UTF-8, oversized files and cross-account access. Production proxy and protected storage remain part of private staging acceptance.
 
 **Next independent milestone.** Add local downloadable creation using explicit draft content, without enabling external generation.
+
+
+## Phase F checkpoint
+
+Workspace → Drafts exports the selected draft as standalone printable HTML with Persian RTL support. Workspace → Memory exports the account’s explicit notes as UTF-8 CSV. The targeted artifact test checked Persian text, HTML escaping, script blocking and spreadsheet formula neutralization. Both exports run in the browser.
+
+**Next independent milestone.** Start Phase G with account-scoped project tasks. Persist explicit create, list, complete and delete operations, enforce ownership and CSRF, and add one synthetic two-account test. Keep device and external actions gated behind their separate permission model.
