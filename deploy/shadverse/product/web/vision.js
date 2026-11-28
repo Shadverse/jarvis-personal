@@ -36,6 +36,7 @@ const errors = {
     "مهلت تصویر پایان یافته است. دوباره تصویر را برای تحلیل بفرستید.",
     "The visual context expired. Resend the selected image to start a new context.",
   ],
+  vision_canceled: ["تحلیل لغو شد.", "Analysis was canceled."],
   vision_failed: ["مدل پاسخی نداد.", "The model did not return an answer."],
   speech_local: [
     "بازشناسی فارسی روی دستگاه در دسترس نیست. پرسش را بنویسید.",

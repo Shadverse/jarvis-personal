@@ -24,7 +24,7 @@ free -h
 ss -ltn '( sport = :18789 or sport = :3404 or sport = :3443 )'
 ```
 
-پیش از ادامه، اتصال درگاه را روی IPv4 loopback، حالت احراز هویت را روی `token`، فضای آزاد حافظه و پردازنده را کافی و دو پورت آزمایشی را آزاد تأیید کنید. مسیر ذخیره‌سازی رمزگذاری‌شده را با `findmnt -T /PATH/TO/ENCRYPTED/CREATOR/STORAGE` بررسی کنید. اشتراک موجود ChatGPT را برای عامل `main` و نبود مسیر جایگزین پولی را تأیید کنید. زمان و سلامت سرویس‌های موجود را برای مقایسه ثبت کنید.
+پیش از ادامه، اتصال درگاه را روی IPv4 loopback، حالت احراز هویت را روی `token`، فضای آزاد حافظه و پردازنده را کافی و دو پورت آزمایشی را آزاد تأیید کنید. مسیر ذخیره‌سازی رمزگذاری‌شده را با `findmnt -T /PATH/TO/ENCRYPTED/CREATOR/STORAGE` بررسی کنید. روش رسمی احراز هویت، صلاحیت حساب، هزینهٔ نهایی صفر و نبود مسیر جایگزین پولی را برای مدل دقیق عامل `main` تأیید کنید. نام طرح اشتراک به‌تنهایی صلاحیت را ثابت نمی‌کند. زمان و سلامت سرویس‌های موجود را برای مقایسه ثبت کنید.
 
 پیکربندی مؤثر Nginx را خصوصی با `sudo nginx -T` بررسی کنید. اگر هر مسیر عمومی، درخواست‌های API سازگاری مثل `/v1/responses`، `/v1/models` و `/v1/embeddings` را به درگاه یا یک پراکسی فراگیر می‌فرستد، کار را متوقف کنید. وجود Basic Auth به‌تنهایی خصوصی بودن آن مسیر را ثابت نمی‌کند. سیاست مؤثر ابزارها و فرمان‌های داخلی عامل `main` باید دسترسی به اعتبارها، دستورات مدیریتی و ابزارهای پرخطر را محدود کند. API با اعتبار مشترک، درخواست را با اختیار مالک اجرا می‌کند. صرف خودداری مدل در یک پیام برای این پذیرش کافی نیست. [مستندات OpenResponses](https://docs.openclaw.ai/gateway/openresponses-http-api)
 
@@ -63,7 +63,9 @@ esbuild_package=$(cd "$product" && node -p 'require.resolve("esbuild/package.jso
 encrypted_root=/PATH/TO/ENCRYPTED/CREATOR/STORAGE
 stage=$(mktemp -d "$encrypted_root/jarvis-phase04.XXXXXX")
 install -d -m 700 "$stage"/{state,node_modules,nginx-client,nginx-proxy}
-git archive "$reviewed:$product" auth.mjs build.mjs documents.mjs gateway.mjs manage.mjs memory.mjs models.mjs server.mjs web | tar -x -C "$stage"
+mapfile -t stage_sources < <(git ls-tree --name-only "$reviewed:$product" | awk '/\.mjs$/')
+test "${#stage_sources[@]}" -gt 0
+git archive "$reviewed:$product" -- "${stage_sources[@]}" web | tar -x -C "$stage"
 ln -s "$(dirname "$esbuild_package")" "$stage/node_modules/esbuild"
 node "$stage/build.mjs"
 
@@ -106,11 +108,19 @@ http {
         ssl_certificate_key "$stage/stage.key";
         auth_basic off;
         client_max_body_size 24k;
+        proxy_set_header Host \$http_host;
+        proxy_set_header Authorization "";
+        proxy_read_timeout 130s;
         location / {
             proxy_pass http://127.0.0.1:3404;
-            proxy_set_header Host \$http_host;
-            proxy_set_header Authorization "";
-            proxy_read_timeout 130s;
+        }
+        location = /api/documents {
+            client_max_body_size 1400k;
+            proxy_pass http://127.0.0.1:3404;
+        }
+        location = /api/vision {
+            client_max_body_size 3400k;
+            proxy_pass http://127.0.0.1:3404;
         }
     }
 }
@@ -144,6 +154,8 @@ chromium --user-data-dir="$(mktemp -d)" --ignore-certificate-errors-spki-list="$
 ```
 
 ## ۳. پذیرش با دو پیام واقعی
+
+پیش از ارسال پیام، مسیر مدل رایگانِ بازبینی‌شده را با `JARVIS_MODEL_POLICY_FILE` در همان فرایند آزمایشی فعال کنید. پیش‌بررسی بدون استنتاج به این مرحله وابسته نیست. اگر صلاحیت، هزینهٔ صفر یا غیرفعال‌بودن مسیرهای جایگزین پولی تأیید نشده است، پذیرش مدل را در انتظار نگه دارید. [سیاست مدل](MODEL_POLICY.md)
 
 1. عنوان فارسی، فقط یک فرم ورود و نبود هر دو درخواست Basic و توکن درگاه را بررسی کنید. پیش از ورود، `GET /api/session` باید `401` بدهد. در مرورگر، درخواست مستقیم `GET /v1/responses` باید `404` بدهد.
 2. با کاربر خالق آزمایشی وارد شوید. فقط این دو پیام کوتاه را از خود رابط بفرستید. پیام اول «در همین گفت‌وگو کد باران-۴۲ را برای پیام بعد در نظر بگیر و فقط بگو آماده‌ام. چیزی در حافظهٔ دائمی ذخیره نکن.» پیام دوم «کد همین گفت‌وگو چه بود؟» پاسخ دوم باید «باران-۴۲» باشد. دو پیام را ثبت کنید و به سقف سه درخواست پایبند بمانید.

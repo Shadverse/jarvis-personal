@@ -2,9 +2,9 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** P0 · Restricted multimodal intelligence
+**Active milestone** P0 · Live acceptance pending private access
 
-**Latest verified remote checkpoint before the camera and voice integration** `ba57249320894db37e6a30505e28b4dababefdc5`
+**Verified remote baseline for live integration** `320c5619f2cfa1510453bf362f17d3e31487f5d7`
 
 **Phase A live acceptance** PENDING. The Phase A checkpoint is on the remote branch.
 **Graphics** Frozen. The current interface and isolated hologram preview are retained.
@@ -150,3 +150,14 @@ JARVIS Vision uses browser camera and screen permission requests and the local f
 Local validation passed 15 product tests, including synthetic media and speech in Chromium, real authenticated product endpoints, and a loopback OpenResponses fixture. An additional offline check exercised the pinned OpenClaw deny-all matcher against shell, browser, messaging, node, scheduling and extension tool names. The checks do not establish the effective tool policy of a deployed Gateway or actual provider vision quality.
 
 **Continuation.** With authorized private staging, complete the [P0 vision staging procedure](deploy/shadverse/product/VISION_STAGING.md). Verify the separate runtime's effective tool policy, the exact zero-cost model, and one Persian turn plus follow-up with a synthetic camera frame or screenshot. Check physical camera and microphone release on supported devices. Until then, leave admission unset.
+
+
+## P0 live integration handoff
+
+The accessible Cloud workspace gives no authorized SHADVERSE staging destination or outbound identity. No private proxy configuration, provider account, or physical device was available to inspect. The existing preflight exited `not_configured` locally. No live request or provider inference was made.
+
+The corrected Phase A archive built and started locally from the reviewed Git tree. The loopback product process rejected unauthenticated session access and served no Gateway endpoint. The new two-Gateway preflight stops if Creator ingress fails, validates the pinned vision admission, and issues only empty loopback requests. An HTTP fixture verified ordering and redaction. Explicit vision Stop now closes the in-flight upstream connection and settles the connected caller with HTTP 409. Client disconnect behavior and reserved usage were also verified locally.
+
+The daily ledger still reserves the catalog context window plus the maximum output before dispatch. It settles on valid measured receipts and retains the reserve when accounting is absent, including cancellation. Text and vision share a UTC-day ledger. A lower input cap has no verified provider-side enforcement across visual turns, image reuse, or automatic runtime activity. Keep the conservative reserve pending measured and enforceable limits.
+
+**Continuation.** Obtain authorized private staging access. Inspect the effective proxy and both runtime configurations read-only. Run the existing Creator preflight before the new separate vision preflight. Keep inference disabled until the exact provider and effective runtime policy are verified. Then run the two-turn synthetic test and collect the redacted usage delta and physical-device evidence.

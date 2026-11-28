@@ -81,6 +81,10 @@ export async function checkGateway() {
     return "invalid_configuration";
   }
   if (!gateway) return "not_configured";
+  return probeResponses(gateway);
+}
+
+export async function probeResponses(gateway) {
   try {
     // An empty request fails the Responses schema before any model dispatch.
     // Check that anonymous access is denied before using the local credential.

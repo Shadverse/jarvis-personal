@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 import { crc32, deflateSync } from "node:zlib";
 import { addUser, invite, openStore } from "../auth.mjs";
 import { openVision } from "../vision.mjs";
@@ -51,12 +52,41 @@ test("restricted vision admission, image forwarding and usage through the authen
     return path;
   };
   const requests = [];
+  const probes = [];
+  let creatorAnonymousStatus = 401;
+  const respondToProbe = (req, res, name, token, body, anonymousStatus = 401) => {
+    probes.push({ name, authorized: req.headers.authorization === "Bearer " + token, body });
+    res.statusCode =
+      req.headers.authorization === undefined
+        ? anonymousStatus
+        : req.headers.authorization === "Bearer " + token
+          ? 400
+          : 401;
+    res.end(JSON.stringify({ error: { type: "invalid_request_error" } }));
+  };
+  const creatorUpstream = createServer(async (req, res) => {
+    const parts = [];
+    for await (const part of req) parts.push(part);
+    respondToProbe(
+      req,
+      res,
+      "creator",
+      creatorToken,
+      JSON.parse(Buffer.concat(parts)),
+      creatorAnonymousStatus,
+    );
+  }).listen(0, "127.0.0.1");
+  await once(creatorUpstream, "listening");
+  t.after(() => new Promise((resolve) => creatorUpstream.close(resolve)));
   let slow = false,
     canceled = false;
   const upstream = createServer(async (req, res) => {
     const parts = [];
     for await (const part of req) parts.push(part);
-    requests.push({ headers: req.headers, body: JSON.parse(Buffer.concat(parts)) });
+    const body = JSON.parse(Buffer.concat(parts));
+    if (Object.keys(body).length === 0)
+      return respondToProbe(req, res, "vision", visionToken, body);
+    requests.push({ headers: req.headers, body });
     if (slow) {
       res.on("close", () => {
         canceled = true;
@@ -97,7 +127,7 @@ test("restricted vision admission, image forwarding and usage through the authen
     gatewayFallbacksDisabled: true,
   };
   const modelPolicyFile = await put("models.json", {
-    dailyTokens: 2000,
+    dailyTokens: 2250,
     dailySpendMicros: 0,
     catalog: {
       models: [
@@ -140,7 +170,7 @@ test("restricted vision admission, image forwarding and usage through the authen
       imageContinuity: true,
     },
   };
-  const creator = { port: 16000, token: creatorToken, creator: "creator" };
+  const creator = { port: creatorUpstream.address().port, token: creatorToken, creator: "creator" };
   await assert.rejects(
     openVision(
       db,
@@ -150,17 +180,46 @@ test("restricted vision admission, image forwarding and usage through the authen
     ),
     /Invalid restricted vision admission/,
   );
+  const env = {
+    PATH: process.env.PATH,
+    PORT: String(productPort),
+    JARVIS_ORIGIN: origin,
+    JARVIS_STATE: state,
+    JARVIS_GATEWAY_PORT: String(creator.port),
+    JARVIS_GATEWAY_CREATOR: creator.creator,
+    JARVIS_GATEWAY_TOKEN_FILE: await put("creator-token", creatorToken),
+    JARVIS_VISION_ADMISSION_FILE: await put("admission", admission),
+  };
+  const check = (overrides = {}) =>
+    promisify(execFile)(
+      process.execPath,
+      [new URL("../manage.mjs", import.meta.url).pathname, "check-vision-gateway"],
+      { env: { ...env, JARVIS_STATE: "", ...overrides } },
+    );
+  creatorAnonymousStatus = 200;
+  await assert.rejects(check(), (error) => {
+    assert.deepEqual(JSON.parse(error.stdout), {
+      stage: "creator",
+      status: "unexpected_anonymous_status",
+    });
+    return true;
+  });
+  assert.deepEqual(probes.splice(0), [{ name: "creator", authorized: false, body: {} }]);
+  creatorAnonymousStatus = 401;
+  const checked = await check();
+  assert.deepEqual(JSON.parse(checked.stdout), {
+    stage: "vision",
+    status: "ready_for_live_review",
+  });
+  assert.ok(!checked.stdout.includes(visionToken) && !checked.stdout.includes(creatorToken));
+  assert.deepEqual(
+    probes,
+    ["creator", "vision"].flatMap((name) =>
+      [false, true].map((authorized) => ({ name, authorized, body: {} })),
+    ),
+  );
   const server = spawn(process.execPath, [new URL("../server.mjs", import.meta.url).pathname], {
-    env: {
-      PATH: process.env.PATH,
-      PORT: String(productPort),
-      JARVIS_ORIGIN: origin,
-      JARVIS_STATE: state,
-      JARVIS_GATEWAY_PORT: String(creator.port),
-      JARVIS_GATEWAY_CREATOR: creator.creator,
-      JARVIS_GATEWAY_TOKEN_FILE: await put("creator-token", creatorToken),
-      JARVIS_VISION_ADMISSION_FILE: await put("admission", admission),
-    },
+    env,
   });
   const exit = once(server, "exit");
   t.after(async () => {
@@ -367,10 +426,28 @@ test("restricted vision admission, image forwarding and usage through the authen
   for (let tries = 0; tries < 100 && !canceled; tries++)
     await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(canceled, true);
+  // A stop request from a still-connected browser must settle the analysis HTTP request too.
+  db.prepare("UPDATE model_attempts SET status='completed' WHERE status='uncertain'").run();
+  canceled = false;
+  const stopped = ask({ image: png(1) }, account, AbortSignal.timeout(2000));
+  void stopped.catch(() => {});
+  for (let tries = 0; tries < 100 && requests.length !== 4 + browserTurns; tries++)
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(requests.length, 4 + browserTurns);
+  assert.equal((await post("vision", { clear: true }, member)).status, 403);
+  assert.equal((await post("vision", { clear: true }, account)).status, 200);
+  const canceledResponse = await stopped;
+  assert.equal(canceledResponse.status, 409);
+  assert.deepEqual(await canceledResponse.json(), { error: "vision_canceled" });
+  assert.equal(canceled, true);
   const usage = db.prepare("SELECT total,status FROM model_attempts ORDER BY rowid").all();
   assert.deepEqual(
     usage.map(({ total, status }) => [total, status]),
-    [...Array.from({ length: 2 + browserTurns }, () => [7, "completed"]), [null, "uncertain"]],
+    [
+      ...Array.from({ length: 2 + browserTurns }, () => [7, "completed"]),
+      [null, "completed"],
+      [null, "uncertain"],
+    ],
   );
   // Model a healthy route with an unmeasured completed receipt. That reserve
   // must still count even once the failure cooldown no longer applies.
@@ -382,5 +459,5 @@ test("restricted vision admission, image forwarding and usage through the authen
   const changed = await ask({ image: png(1) }, account);
   assert.equal(changed.status, 503);
   assert.equal((await changed.json()).error, "vision_unavailable");
-  assert.equal(requests.length, 3 + browserTurns);
+  assert.equal(requests.length, 4 + browserTurns);
 });
