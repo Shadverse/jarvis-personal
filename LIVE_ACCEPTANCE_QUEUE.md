@@ -12,3 +12,11 @@ Keep account identifiers, credentials, prompts containing private data, and raw 
 | D–G · Memory, multimodal, creative and device actions | PENDING IMPLEMENTATION | Isolated runtimes, approved artifact/media providers and device scopes when applicable | Add specific live acceptance cases when implementation reaches each capability. |
 | H–I · Integrations and background work | PENDING IMPLEMENTATION | Official connector consent and vetted isolated execution inputs | Verify scopes, cross-user denial, revocation, cancellation, and emergency stop before granting broader capabilities. |
 | J–K · Administration, commercial isolation and billing | PENDING IMPLEMENTATION | Independent tenant runtimes and explicit authorization for any financial transaction | Verify two-user isolation, entitlement and spending boundaries, and sandbox billing before real billing. |
+
+
+### Phase C staging procedure
+
+1. Run the reviewed build on authorized private HTTPS staging. Sign in as the configured Creator and use an approved no-cost inference route. No browser speech provider should be enabled remotely.
+2. In a browser with an installed local Persian recognition pack and local Persian synthesis voice, choose **Voice → Speak Persian** and grant microphone permission for that origin. Say a short synthetic Persian sentence and verify its transcript, live model reply, Persian playback, and matching Text Chat transcript.
+3. Repeat on desktop and mobile where the local pack is available. Cancel during listening, processing and playback. Confirm microphone and playback release, no new turn after cancellation, and Gateway cancellation or explicit uncertainty in staging logs.
+4. With no Persian pack or voice, verify the Persian text fallback and absence of a remote speech call. A prerecorded sample or a microphone level signal does not satisfy this acceptance.

@@ -146,7 +146,11 @@ createServer(async (req, res) => {
       const message = typeof body?.message === "string" ? body.message.trim() : "";
       if (!message || message.length > 4000) return json(400, { error: "message" });
       if (chatPending) return json(429, { error: "busy" });
+      if (res.destroyed) return;
       chatPending = true;
+      const cancel = new AbortController();
+      const onClose = () => cancel.abort();
+      res.once("close", onClose);
       try {
         const exclude = new Set();
         for (let retry = 0; retry < (models ? 2 : 1); retry++) {
@@ -165,9 +169,11 @@ createServer(async (req, res) => {
             gateway.token,
             120_000,
             attempt?.route.model,
+            cancel.signal,
           ).catch(() => null);
           if (!upstream) {
             if (attempt) models.finish(attempt, "uncertain", null);
+            if (cancel.signal.aborted) return;
             return json(502, { error: "gateway" });
           }
           if (upstream.statusCode !== 200) {
@@ -179,7 +185,7 @@ createServer(async (req, res) => {
                 error.error.message ===
                   `Model '${attempt.route.model}' is not allowed for agent 'main'.`;
               models.finish(attempt, notAdmitted ? "rejected" : "uncertain", null);
-              if (notAdmitted && retry === 0) {
+              if (notAdmitted && retry === 0 && !cancel.signal.aborted) {
                 exclude.add(attempt.route.model);
                 continue;
               }
@@ -200,11 +206,16 @@ createServer(async (req, res) => {
             .map((part) => part.text)
             .join("\n")
             .trim();
+          if (cancel.signal.aborted) {
+            if (attempt) models.finish(attempt, "uncertain", usage);
+            return;
+          }
           const ok = result?.status === "completed" && reply && !reply.includes(gateway.token);
           if (attempt) models.finish(attempt, ok ? "completed" : "uncertain", usage);
           return ok ? json(200, { reply }) : json(502, { error: "gateway" });
         }
       } finally {
+        res.off("close", onClose);
         chatPending = false;
       }
     }

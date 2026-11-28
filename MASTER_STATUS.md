@@ -2,7 +2,9 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Phase B · Managed Creator model routing
+**Active milestone** Phase C · Persian voice and local device capabilities
+
+**Latest verified remote checkpoint before Phase C** `620669c47daa45706bd25f0b2b21000d006919d4`
 
 **Phase A live acceptance** PENDING. The Phase A checkpoint is on the remote branch.
 **Graphics** Frozen. The current interface and isolated hologram preview are retained.
@@ -11,15 +13,16 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 
 | Phase | Capability | Status | Evidence or gap |
 | --- | --- | --- | --- |
-| A | Persian Gate, registration-code activation, secure session, sign-out and session revocation | VERIFIED WORKING | Isolated product auth suite, including browser sign-in and sign-out. Production cutover is outside this evidence. |
+| A | Persian Gate, registration-code activation, secure session, sign-out and session revocation | VERIFIED LOCAL | Isolated product auth suite, including browser sign-in and sign-out. Production cutover is outside this evidence. |
 | A | Creator-only Gateway bridge, single login, server-held token, stable conversation routing | PARTIALLY IMPLEMENTED | The product bridge exists. Local endpoint fixtures cover account isolation, credential boundaries and stable routing. |
-| A | Gateway staging preflight | VERIFIED WORKING | Against an isolated HTTP fixture, the operator command checks that the endpoint rejects an anonymous body and rejects an authenticated empty body at request validation. A response from this check is independent of live inference. |
+| A | Gateway staging preflight | VERIFIED LOCAL | Against an isolated HTTP fixture, the operator command checks that the endpoint rejects an anonymous body and rejects an authenticated empty body at request validation. A response from this check is independent of live inference. |
 | A | Live Persian inference and conversation continuity on the selected Creator route | BLOCKED | Historical staging evidence exists for an earlier revision. Current acceptance needs an authorized private Gateway and an approved provider route. |
 | B | Provider registry, capability discovery, secure configuration and Creator administration | PARTIALLY IMPLEMENTED | Managed mode reads OpenClaw catalog metadata and a private operator policy. Creator can list, pause and resume eligible routes. Actual account eligibility remains pending. |
 | B | Task-aware free-only routing, fallback, health monitoring, token and spending limits, usage accounting | PARTIALLY IMPLEMENTED | Managed text routing uses the same Creator agent. A local HTTP fixture exercised selection, safe fallback, health and budget accounting. Spending stays at zero. Live provider receipts and cap behavior are pending. |
-| C | Browser microphone permission, microphone analysis, audio lifecycle, text fallback | VERIFIED WORKING | Prior local browser checks inspected input levels and microphone track release. |
+| C | Browser microphone permission, microphone analysis, audio lifecycle, text fallback | VERIFIED LOCAL | Prior local browser checks inspected input levels and microphone track release. |
 | C | Prerecorded playback and demonstration voice states | MOCKED | A real prerecorded asset and illustrative state controls simulate interaction. |
-| C | Persian STT, inference-to-TTS, streaming, continuous turns, voice activity, interruption and cancellation | MISSING | No end-to-end voice transport, speech recognition or synthesis is connected. |
+| C | Single Persian voice turn, speech-to-chat, local synthesis and cancellation | IMPLEMENTED — LIVE ACCEPTANCE PENDING | Browser and Gateway fixtures exercised the signed-in path, local-only requirements, disconnect propagation and text fallback. Actual Persian audio, live inference and native playback require an authorized staging device. |
+| C | Streaming speech, hands-free conversation, device selection and voice activity detection | MISSING | The current implementation handles one explicit turn. |
 | D | Persistent Creator session context | PARTIALLY IMPLEMENTED | The existing OpenClaw session owns context. The product does not restore displayed turns on reload. |
 | D | Preferences, personal and project memory, retrieval, long-term knowledge, search, edit, delete, export and backup | MISSING | Product storage and per-user isolation are absent. Existing upstream operator capabilities require a product integration. |
 | E | Attachment selection and local image thumbnails | PARTIALLY IMPLEMENTED | Local selection and preview exist. The product rejects inference requests with attachments. |
@@ -55,3 +58,12 @@ The application and operator command share the existing server-side token-file v
 Managed orchestration is opt-in through an owner-only operator policy. No provider was enabled in this environment. The existing Creator Gateway remains the only inference transport. Commercial users cannot access its routes or credentials. A targeted HTTP fixture exercised Persian task selection, rejection of browser-supplied overrides, one pre-admission fallback, Creator-only pause and resume, token accounting, and a refusal after the unmeasured reservation exhausted the budget. The fixture did not call a real provider.
 
 See the [model policy](deploy/shadverse/product/MODEL_POLICY.md) and [live acceptance queue](LIVE_ACCEPTANCE_QUEUE.md). Next independent milestone: the Persian speech path with an authorized local engine and text fallback.
+
+
+## Phase C checkpoint
+
+In the authenticated Creator Voice screen, the microphone control runs one Persian turn. Recognition requires the browser to report an available local `fa-IR` pack, and playback uses a Persian voice marked local. The transcript goes through the existing authenticated chat route. Replies also appear in Text Chat. Cancel, navigation and page hiding terminate the current browser work. The product closes the active Gateway connection if the browser disconnects. Live provider abort behavior remains a separate check.
+
+**Local proof.** The targeted Chromium test used injected speech fixtures and a local HTTP Gateway fixture. It checked that recognition and playback remain local, the synthetic Persian transcript traverses the authenticated production route, unavailable recognition sends no inference request, and cancel closes the active Gateway connection. No provider was contacted and no actual Persian audio was recognized.
+
+**Next independent milestone.** Persist explicitly saved personal memory notes under the authenticated account, with local ownership tests.

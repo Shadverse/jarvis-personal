@@ -3,6 +3,7 @@ import { energyCore, voiceStates } from "./core.js";
 import { icon } from "./icons.js";
 import { Signal } from "./identity/audio.js";
 import { mountHead } from "./identity/head.js";
+import { localPersianVoice, recognizePersian, speakPersian } from "./identity/persian-speech.js";
 import { mountScope } from "./instruments.js";
 const app = document.querySelector("#app");
 const standalone =
@@ -38,7 +39,8 @@ let workspaceEpoch = 0,
 let head = null,
   stopScope = null,
   lastPortrait = null,
-  voiceEpoch = 0;
+  voiceEpoch = 0,
+  voiceRun = null;
 let projects = [],
   activeProject = "",
   notes = [],
@@ -54,6 +56,11 @@ function stopAudio() {
   voiceEpoch++;
   clearInterval(meterTimer);
   signal.stop();
+  if (voiceRun) {
+    voiceRun.abort();
+    voiceRun = null;
+    sending = false;
+  }
 }
 function clearWorkspace() {
   workspaceEpoch++;
@@ -167,7 +174,7 @@ function voice() {
     <div class="voice-dock glass">
       <div class="audio-buttons">
         <div class="voice-mic">
-          ${button("mic", icon("mic") + `<span class="voice-mic-label">${t("آزمایش میکروفون", "Test microphone")}</span>`, "mic-check voice-main-control")}
+          ${button("mic", icon("mic") + `<span class="voice-mic-label">${(session?.chatAvailable ? t("صحبت به فارسی", "Speak Persian") : t("آزمایش میکروفون", "Test microphone"))}</span>`, "mic-check voice-main-control")}
         </div>
         ${button("sample", icon("wave") + t("پخش نمونهٔ انگلیسی", "Play voice sample"), "mic-check")}
         ${button("main", icon("chat") + t("گفت‌وگوی متنی", "Text chat"), "voice-text-control")}
@@ -179,7 +186,9 @@ function voice() {
         </div>
       </div>
       <div class="voice-copy">
-        <p class="voice-note">${t("گفت‌وگوی صوتی زنده هنوز متصل نیست.", "Live voice conversation is unavailable.")}</p>
+        <p class="voice-note">${session?.chatAvailable
+          ? t("بازشناسی و پخش گفتار به پشتیبانی فارسیِ محلی مرورگر نیاز دارند.", "Speech recognition and playback require local Persian support in your browser.")
+          : t("گفت‌وگوی صوتی زنده در این نشست در دسترس نیست.", "Live voice conversation is unavailable in this session.")}</p>
         <p class="notice" id="audio-status" role="status">${safe(micState)}</p>
       </div>
     </div>
@@ -208,20 +217,22 @@ function syncVoice() {
   const portrait = stage.querySelector(".portrait");
   if (portrait) portrait.dataset.state = demoState;
   head?.setState(demoState);
-  stage.querySelector("#state-title").textContent = t(...voiceStates[demoState]);
+  stage.querySelector("#state-title").textContent =
+    voiceRun && demoState === "speaking" ? t("در حال صحبت", "Speaking") : t(...voiceStates[demoState]);
   for (const b of stage.querySelectorAll(".modes button"))
     b.setAttribute("aria-pressed", String(b.dataset.action === "demo-" + demoState));
   stage.querySelector("#audio-status").textContent = micState;
   for (const [action, mode, ico, off] of [
-    ["mic", "mic", "mic", t("آزمایش میکروفون", "Test microphone")],
+    ["mic", "mic", "mic", session?.chatAvailable ? t("صحبت به فارسی", "Speak Persian") : t("آزمایش میکروفون", "Test microphone")],
     ["sample", "sample", "wave", t("پخش نمونهٔ انگلیسی", "Play voice sample")],
   ]) {
     const b = stage.querySelector('[data-action="' + action + '"]');
     const stop = mode === "mic" ? t("قطع میکروفون", "Stop microphone") : t("توقف پخش", "Stop playback");
-    const caption = signal.mode === mode ? stop : off;
+    const active = signal.mode === mode || (mode === "mic" && Boolean(voiceRun));
+    const caption = voiceRun && mode === "mic" ? t("لغو نوبت", "Cancel turn") : active ? stop : off;
     if (mode === "mic") b.querySelector(".voice-mic-label").textContent = caption;
     else b.innerHTML = icon(ico) + caption;
-    b.setAttribute("aria-pressed", String(signal.mode === mode));
+    b.setAttribute("aria-pressed", String(active));
   }
 }
 function workspaceItems() {
@@ -291,8 +302,6 @@ function admin() {
   const health = {
     unknown: t("بررسی‌نشده", "Unchecked"),
     healthy: t("سالم", "Healthy"),
-    no_model: t("مدل تأییدشده‌ای برای این درخواست در دسترس نیست.", "No approved model is available for this request."),
-    token_budget: t("سهمیهٔ توکن امروز برای این درخواست کافی نیست.", "Today's token budget is insufficient for this request."),
     busy: t("در حال پاسخ", "Busy"),
     cooldown: t("وقفهٔ موقت", "Cooling down"),
     retryable: t("آمادهٔ بررسی دوباره", "Ready to retry"),
@@ -353,9 +362,10 @@ function render() {
     .querySelectorAll(".remove")
     .forEach((el) => el.setAttribute("aria-label", t("حذف پیوست", "Remove attachment")));
 }
-async function api(path, body) {
+async function api(path, body, signal) {
   const response = await fetch("/api/" + path, {
     method: body ? "POST" : "GET",
+    signal,
     headers: body
       ? { "Content-Type": "application/json", "X-CSRF-Token": session?.csrf || "" }
       : {},
@@ -380,6 +390,12 @@ function errorText(code) {
       "دریافت پاسخ از جارویس ممکن نشد. دوباره تلاش کنید.",
       "JARVIS could not respond. Try again.",
     ),
+    speech_local: t("بازشناسی فارسی روی دستگاه در دسترس نیست. از گفت‌وگوی متنی استفاده کنید.", "Local Persian recognition is unavailable. Use Text chat."),
+    speech_permission: t("دسترسی میکروفون رد شد. مجوز مرورگر یا گفت‌وگوی متنی را بررسی کنید.", "Microphone access was denied. Check browser permissions or use Text chat."),
+    speech_empty: t("گفتار تشخیص داده نشد. دوباره تلاش کنید یا پیام را بنویسید.", "No speech was recognized. Try again or type your message."),
+    speech_playback: t("پخش فارسی در دسترس نیست. پاسخ در گفت‌وگوی متنی آماده است.", "Persian playback is unavailable. The reply is in Text chat."),
+    no_model: t("مدل تأییدشده‌ای برای این درخواست در دسترس نیست.", "No approved model is available for this request."),
+    token_budget: t("سهمیهٔ توکن امروز برای این درخواست کافی نیست.", "Today's token budget is insufficient for this request."),
     busy: t(
       "جارویس هنوز در حال آماده‌کردن پاسخ قبلی است.",
       "JARVIS is still preparing the previous reply.",
@@ -395,6 +411,72 @@ function errorText(code) {
     errors[code] ||
     t("درخواست انجام نشد. اتصال خود را بررسی کنید.", "Request failed. Check your connection.")
   );
+}
+function returnToGate() {
+  stopAudio();
+  clearWorkspace();
+  session = null;
+  page = "login";
+  draft = "";
+  files = [];
+  drawer = false;
+  feedback = errorText("auth");
+  render();
+}
+async function runPersianTurn() {
+  if (voiceRun) {
+    stopAudio();
+    demoState = "idle";
+    micState = t("نوبت صوتی لغو شد.", "Voice turn canceled.");
+    syncVoice();
+    return;
+  }
+  if (sending) {
+    micState = errorText("busy");
+    syncVoice();
+    return;
+  }
+  const requester = session;
+  stopAudio();
+  const controller = new AbortController();
+  voiceRun = controller;
+  sending = true;
+  demoState = "listening";
+  micState = t("به فارسی صحبت کنید.", "Speak in Persian.");
+  syncVoice();
+  try {
+    const message = (await recognizePersian(controller.signal)).slice(0, 4000).trim();
+    controller.signal.throwIfAborted();
+    demoState = "thinking";
+    micState = t("جارویس در حال آماده‌کردن پاسخ است…", "JARVIS is preparing a reply…");
+    syncVoice();
+    const { reply } = await api("chat", { message }, controller.signal);
+    controller.signal.throwIfAborted();
+    if (session !== requester) return;
+    turns.push({ speaker: "human", text: message }, { speaker: "assistant", text: reply });
+    const voice = localPersianVoice();
+    if (!voice) {
+      micState = errorText("speech_playback");
+    } else {
+      demoState = "speaking";
+      micState = t("پاسخ جارویس", "JARVIS reply");
+      syncVoice();
+      await speakPersian(reply, voice, controller.signal);
+      micState = t("پاسخ در گفت‌وگوی متنی هم در دسترس است.", "The reply is also in Text chat.");
+    }
+  } catch (error) {
+    if (!controller.signal.aborted && session === requester) {
+      if (error.message === "auth") returnToGate();
+      else micState = errorText(error.message);
+    }
+  } finally {
+    if (voiceRun === controller) {
+      voiceRun = null;
+      sending = false;
+      demoState = "idle";
+      if (page === "voice") syncVoice();
+    }
+  }
 }
 app.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -429,15 +511,7 @@ app.addEventListener("submit", async (event) => {
     } catch (err) {
       if (session !== requester) return;
       if (err.message === "auth") {
-        stopAudio();
-        clearWorkspace();
-        session = null;
-        page = "login";
-        draft = "";
-        files = [];
-        drawer = false;
-        feedback = errorText(err.message);
-        render();
+        returnToGate();
         return;
       }
       chatFeedback = errorText(err.message);
@@ -587,6 +661,9 @@ app.addEventListener("click", async (event) => {
     micState = "";
     demoState = "idle";
     reveal = false;
+  } else if (action === "mic" && session?.chatAvailable && !review) {
+    await runPersianTurn();
+    return;
   } else if (action === "mic" || action === "sample") {
     const stopping = signal.mode === action;
     stopAudio();
