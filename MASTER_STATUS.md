@@ -2,7 +2,7 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Product integration · Pending authorized staging acceptance
+**Active milestone** P0 · Restricted multimodal intelligence
 
 **Latest verified remote checkpoint before the mobile integration fix** `b9cb2abd27cdca186a67d4799fab4462c1910a8f`
 
@@ -29,7 +29,8 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | D | Preferences, long-term knowledge and managed backup | MISSING | No product integration for these capabilities. |
 | E | Attachment selection and local image thumbnails | PARTIALLY IMPLEMENTED | Local selection and preview exist. The product rejects inference requests with attachments. |
 | E | Private TXT, Markdown and CSV storage, plain-text preview, download and deletion | VERIFIED LOCAL | The signed-in product API fixture checked exact downloaded bytes, UTF-8 and filename validation, size enforcement, CSRF and cross-account denial. |
-| E | Document inference, PDFs, structured spreadsheets, vision, camera, voice and visual search | MISSING | Existing Creator-wide tool authority makes untrusted-file inference a separate restricted-adapter milestone. |
+| E | Restricted OpenResponses vision adapter | LOCAL FIXTURE; LIVE DISABLED BY DEFAULT | Separate port and credential, reviewed config pin, deny-all policy admission, PNG normalization, authorized model selection, usage and session isolation. |
+| E | Document inference, PDFs, structured spreadsheets and visual search | MISSING | Separate authorization and adapter are pending. |
 | F | Printable draft documents and personal-note spreadsheets | VERIFIED LOCAL | Standalone HTML and UTF-8 CSV generated in the browser from explicit workspace data. Output escaping and CSV protection passed the local artifact test. |
 | F | Provider-backed image, video, audio, music, presentations and document generation | MISSING | Product capability catalog and generation adapters are absent. |
 | G | Existing private OpenClaw tool and paired-device access | PARTIALLY IMPLEMENTED | The upstream operator path is separate. There is no product permission layer for application launching, files, browser actions, commands, desktop companion, mobile actions or external tools. |

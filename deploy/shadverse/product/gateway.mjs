@@ -17,6 +17,10 @@ export async function loadGateway(env = process.env) {
   ) {
     throw Error("Configure the private Gateway token file, Creator username and loopback port.");
   }
+  return { creator, port, token: await readGatewayToken(tokenFile) };
+}
+
+export async function readGatewayToken(tokenFile) {
   const file = await open(tokenFile);
   try {
     const info = await file.stat();
@@ -24,7 +28,7 @@ export async function loadGateway(env = process.env) {
       throw Error("Use an owner-only Gateway token file.");
     const token = (await file.readFile("utf8")).trim();
     if (!/^[!-~]{32,512}$/.test(token)) throw Error("Invalid Gateway credential.");
-    return { creator, port, token };
+    return token;
   } finally {
     await file.close();
   }

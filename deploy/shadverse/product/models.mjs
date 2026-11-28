@@ -189,7 +189,8 @@ export function createModelRegistry(db, policy) {
       else db.prepare("DELETE FROM model_pauses WHERE id=?").run(id);
       return true;
     },
-    reserve(message, exclude, input = message, now = Date.now()) {
+    reserve(message, exclude, input = message, { image = false, routeId = null } = {}) {
+      const now = Date.now();
       const task = taskFor(message);
       const persian = /[\u0600-\u06ff]/u.test(input);
       db.exec("BEGIN IMMEDIATE");
@@ -200,6 +201,8 @@ export function createModelRegistry(db, policy) {
           .filter(
             (route) =>
               route.eligible &&
+              (!image || route.input.includes("image")) &&
+              (routeId === null || route.id === routeId) &&
               !route.paused &&
               !exclude.has(route.model) &&
               route.health !== "cooldown" &&

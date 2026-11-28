@@ -20,6 +20,8 @@ import { loadGateway, postResponses, readGatewayJson } from "./gateway.mjs";
 import { openIntegrations } from "./integrations.mjs";
 import { openMemory } from "./memory.mjs";
 import { createModelRegistry, loadModelPolicy, readUsage } from "./models.mjs";
+import { visionBodyLimit } from "./vision-image.mjs";
+import { openVision } from "./vision.mjs";
 process.umask(0o077);
 const db = openStore(process.env.JARVIS_STATE);
 const conversations = openConversations(db);
@@ -37,6 +39,10 @@ if (
   throw Error("Use HTTPS for an external application origin.");
 const localReview = ["localhost", "127.0.0.1"].includes(origin.hostname);
 const gateway = await loadGateway();
+const vision = await openVision(db, gateway, port).catch(() => {
+  console.error("Restricted vision admission is invalid. Vision dispatch is disabled.");
+  return null;
+});
 const modelPolicy = await loadModelPolicy();
 const models = modelPolicy && createModelRegistry(db, modelPolicy);
 const canChat = (user) =>
@@ -46,6 +52,7 @@ const sessionInfo = (user) => ({
   role: user.role,
   csrf: user.csrf,
   chatAvailable: canChat(user),
+  vision: canChat(user) ? (vision?.limits ?? null) : null,
 });
 const root = fileURLToPath(new URL("./dist/", import.meta.url));
 const types = {
@@ -76,7 +83,10 @@ createServer(async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   if (origin.protocol === "https:") res.setHeader("Strict-Transport-Security", "max-age=31536000");
   res.setHeader("Referrer-Policy", "no-referrer");
-  res.setHeader("Permissions-Policy", "microphone=(self), camera=(), geolocation=()");
+  res.setHeader(
+    "Permissions-Policy",
+    "microphone=(self), camera=(self), display-capture=(self), geolocation=()",
+  );
   res.setHeader(
     "Content-Security-Policy",
     "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
@@ -165,6 +175,7 @@ createServer(async (req, res) => {
     if (req.headers.origin !== origin.origin || req.headers["content-type"] !== "application/json")
       return json(403, { error: "origin" });
     const chat = path === "/api/chat";
+    const visionRequest = path === "/api/vision";
     const manageModels = path === "/api/models";
     const manageMemory = path === "/api/memory";
     const manageDocuments = path === "/api/documents";
@@ -172,6 +183,7 @@ createServer(async (req, res) => {
     const manageIntegrations = path === "/api/integrations";
     if (
       chat ||
+      visionRequest ||
       manageModels ||
       manageMemory ||
       manageDocuments ||
@@ -185,19 +197,28 @@ createServer(async (req, res) => {
       }
       if (req.headers["x-csrf-token"] !== session.csrf) return json(403, { error: "csrf" });
       if (path === "/api/logout") {
+        vision?.clear(session.id);
         db.prepare("DELETE FROM sessions WHERE id=?").run(session.id);
         res.setHeader("Set-Cookie", cookie("", 0));
         return json(200, { ok: true });
       }
-      if ((chat || manageModels) && !canChat(session)) return json(403, { error: "forbidden" });
+      if ((chat || manageModels || visionRequest) && !canChat(session))
+        return json(403, { error: "forbidden" });
     } else {
       if (!["/api/login", "/api/activate"].includes(path)) return json(404, { error: "missing" });
       if (pending >= 4 || rateLimit(db, "ip/" + req.socket.remoteAddress, 40))
         return json(429, { error: "limit" });
     }
+    if (visionRequest && !vision) return json(503, { error: "vision_unavailable" });
     const chunks = [];
     let length = 0;
-    const maxBody = manageDocuments ? documentBodyLimit : chat ? 24576 : 4096;
+    const maxBody = visionRequest
+      ? visionBodyLimit
+      : manageDocuments
+        ? documentBodyLimit
+        : chat
+          ? 24576
+          : 4096;
     for await (const chunk of req) {
       length += chunk.length;
       if (length > maxBody) return json(413, { error: "invalid" });
@@ -208,6 +229,29 @@ createServer(async (req, res) => {
       body = JSON.parse(Buffer.concat(chunks));
     } catch {
       return json(400, { error: "invalid" });
+    }
+    if (visionRequest) {
+      if (body?.clear === true && Object.keys(body).length === 1) {
+        vision.clear(session.id);
+        return json(200, { ok: true });
+      }
+      if (rateLimit(db, "vision/" + session.userId, 12)) return json(429, { error: "limit" });
+      if (!body || Object.keys(body).some((key) => !["image", "message", "context"].includes(key)))
+        return json(400, { error: "invalid" });
+      if (res.destroyed) return;
+      const cancel = new AbortController();
+      const onClose = () => cancel.abort();
+      res.once("close", onClose);
+      try {
+        const result = await vision.analyze(session, body, cancel.signal);
+        if (result && !res.destroyed) {
+          const { status, ...data } = result;
+          return json(status, data);
+        }
+        return;
+      } finally {
+        res.off("close", onClose);
+      }
     }
     if (manageIntegrations) {
       const result = integrations.execute(session.userId, body);
