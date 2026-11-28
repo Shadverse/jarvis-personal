@@ -124,7 +124,7 @@ test(
     await page.locator("#item-name").fill("پروژهٔ آزمایشی");
     await action("add-item").click();
     await action("project-tasks-0").click();
-    await page.locator("#task-title").fill("وظیفهٔ آزمایشی");
+    await page.locator('section[aria-busy="false"] #task-title').fill("وظیفهٔ آزمایشی");
     await action("task-add").click();
     await page.locator('[data-action^="reminder-edit-"]').click();
     // Use tomorrow's local date so valid scheduling stays independent of the test runner date.

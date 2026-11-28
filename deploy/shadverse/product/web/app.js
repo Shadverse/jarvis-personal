@@ -58,6 +58,8 @@ let projects = [],
   memoryNotes = [],
   loadedMemoryScope,
   selectedMemory = null,
+  rankedMemory = null,
+  includeEarlierQuestions = false,
   editingNote = null,
   privateDocuments = null,
   documentPreview = null,
@@ -94,6 +96,8 @@ function clearWorkspace() {
   memoryNotes = [];
   loadedMemoryScope = undefined;
   selectedMemory = null;
+  rankedMemory = null;
+  includeEarlierQuestions = false;
   editingNote = null;
   privateDocuments = null;
   documentPreview = null;
@@ -184,6 +188,24 @@ const starters = () => ({
     t("کمکم کن برای امروز برنامه‌ریزی کنم.", "Help me plan my day."),
   ],
 });
+const memoryKinds = () => ({
+  note: t("یادداشت", "Note"),
+  preference: t("ترجیح", "Preference"),
+  knowledge: t("دانسته", "Knowledge"),
+  conversation: t("پرسش قبلی", "Earlier question"),
+});
+function memoryComposer() {
+  const preview = rankedMemory?.message === draft.trim() &&
+    rankedMemory.scope.projectId === memoryScope() ? rankedMemory.context : null;
+  return `<div class="controls">
+    ${button("memory-rank", t("یافتن حافظهٔ مرتبط", "Find relevant memory"), "outline", sending)}
+    <bdi>${t("دامنه", "Scope")} · ${safe(activeProject || t("شخصی", "Personal"))}</bdi>
+    <label><input id="memory-earlier" type="checkbox" ${includeEarlierQuestions ? "checked" : ""}>
+      ${t("پرسش‌های قبلی هم جست‌وجو شوند", "Also search earlier questions")}</label>
+    </div>${preview?.length ? `<div id="ranked-context">${button("memory-unrank", t("برداشتن زمینه", "Remove context"))}
+      <ul>${preview.map(({ kind, text }) => `<li><bdi>${memoryKinds()[kind]} · ${safe(text)}</bdi></li>`).join("")}</ul>
+      <p class="sub">${t("با ارسال پیام، موارد بالا به مدل فرستاده می‌شوند.", "Sending shares the items above with the configured model.")}</p></div>` : ""}`;
+}
 function home() {
   const connected = !review && session?.chatAvailable;
   return `<div class="studio"><section class="greeting">${emblem()}<h1>${t("از کجا شروع کنیم؟", "Where shall we begin?")}</h1><div class="starters">${Object.entries(
@@ -197,6 +219,7 @@ function home() {
  ${turns.length ? `<ol class="thread" aria-label="${t("پیام‌های گفت‌وگو", "Conversation messages")}">${turns.map(({ message, reply }) => `<li class="turn human"><strong>${t("شما", "You")}</strong><p>${safe(message)}</p></li><li class="turn assistant"><strong>${productName()}</strong><p>${safe(reply)}</p></li>`).join("")}</ol>` : ""}
  <form id="conversation" class="composer glass"><textarea id="draft" maxlength="4000" aria-label="${t("پیام", "Message")}" placeholder="${t("برای جارویس شادوِرس بنویسید…", "Write your message…")}">${safe(draft)}</textarea>
  ${connected && selectedMemory ? `<div class="controls selected-memory"><bdi>${t("یادداشت همراه این پیام به مدل تنظیم‌شده ارسال می‌شود", "Note sent to the configured model with this message")} · ${safe(selectedMemory.text)}</bdi>${button("memory-unselect", t("برداشتن یادداشت", "Remove selected note"))}</div>` : ""}
+ ${connected && !selectedMemory ? memoryComposer() : ""}
  <div id="attachments">${files.map((f, i) => `<span class="chip"><bdi>${safe(f.name)}</bdi>${button("remove-" + i, icon("close"), "remove")}</span>`).join("")}</div>
  <div class="tools">${button("attach", icon("attach"), "iconbtn")}<input type="file" multiple id="file" hidden>${button("save-draft", icon("layers") + t("ذخیرهٔ پیش‌نویس", "Save draft"), "textbtn")}
  ${button("voice", icon("wave") + label("voice"), "voicebtn")}<button type="submit" class="primary send" ${connected && !sending ? "" : "disabled"} aria-label="${t("ارسال", "Send")}">${icon("send")}</button></div></form>
@@ -382,6 +405,8 @@ function space() {
  <div class="controls"><label class="field">${icon("search")}<input type="search" id="search" aria-label="${t("جست‌وجو", "Search")}" value="${safe(query)}" placeholder="${t("جست‌وجو", "Search")}"></label>
  <select id="project-filter" aria-label="${t("پروژهٔ انتخابی", "Active project")}"><option value="">${t("همهٔ پروژه‌ها", "All projects")}</option>${projects.map((n) => `<option ${n === activeProject ? "selected" : ""}>${safe(n)}</option>`).join("")}</select></div>
  ${add ? `<div class="controls"><label class="field"><input id="item-name" dir="auto" maxlength="${privateProjects() ? 120 : 500}" value="${safe(editing?.text ?? "")}" placeholder="${tab === "projects" ? t("نام پروژه", "Project name") : t("یادداشت حافظه", "Memory note")}" aria-label="${label(tab)}"></label>${button("add-item", icon("layers") + (editing ? t("ذخیره", "Save") : t("افزودن", "Add")))}
+ ${workspaceMemory() ? `<label>${t("نوع", "Type")} <select id="memory-kind">${Object.entries(memoryKinds()).filter(([kind]) => kind !== "conversation").map(([kind, name]) => `<option value="${kind}" ${editing?.kind === kind ? "selected" : ""}>${name}</option>`).join("")}</select></label>
+   <label><input id="memory-eligible" type="checkbox" ${editing?.contextAllowed ? "checked" : ""}> ${t("مجاز برای جست‌وجوی حافظه", "Allow relevant retrieval")}</label>` : ""}
  ${editing ? button("memory-cancel", t("انصراف", "Cancel"), "outline") : ""}
  ${workspaceMemory() ? `<a href="/api/${safe(memoryPath(memoryScope(), true))}" class="outline">${t("خروجی حافظه", "Export memory")}</a>
    ${visibleNotes().length ? button("memory-csv", t("دریافت جدول CSV", "Download CSV"), "outline") : ""}` : ""}</div>` : ""}
@@ -541,6 +566,9 @@ function errorText(code) {
     project_invalid: t("نام معتبر پروژه را وارد کنید.", "Enter a valid project name."),
     project_cap: t("حداکثر ۵۰ پروژه مجاز است.", "You can save up to 50 projects."),
     file_cap: t("به سقف ذخیره‌سازی فایل رسیده‌اید.", "Your file storage limit has been reached."),
+    note_duplicate: t("یک یادداشت یکسان در این دامنه وجود دارد.", "This scope already contains the same note."),
+    context_scope: t("دامنهٔ حافظه در دسترس نیست.", "This memory scope is unavailable."),
+    context_stale: t("حافظه تغییر کرده است. دوباره جست‌وجو کنید.", "The context changed. Find relevant memory again."),
     note_unavailable: t("یادداشت تغییر کرده یا در دسترس نیست. دوباره آن را انتخاب کنید.", "The note changed or is unavailable. Select it again."),
     note_missing: t("این یادداشت در حساب شما پیدا نشد.", "This note was not found in your account."),
     note_cap: t("به سقف ۱۰۰ یادداشت رسیده‌اید.", "Your account has reached its 100-note limit."),
@@ -639,7 +667,7 @@ async function runPersianTurn(continuous = false) {
       demoState = "thinking";
       micState = t("جارویس در حال آماده‌کردن پاسخ است…", "JARVIS is preparing a reply…");
       syncVoice();
-      const { reply, turn } = await api("chat", { message }, signal);
+      const { reply, turn } = await api("chat", { message, projectId: memoryScope() }, signal);
       signal.throwIfAborted();
       if (session !== requester) return;
       mergeTurns([turn]);
@@ -695,10 +723,18 @@ app.addEventListener("submit", async (event) => {
     );
     try {
       const memory = selectedMemory;
-      const { turn } = await api("chat", memory ? { message, memory: memory.ref } : { message });
+      const ranked = rankedMemory?.message === message && rankedMemory.scope.projectId === memoryScope() ? rankedMemory : null;
+      const payload = { message, projectId: memoryScope() };
+      if (memory) payload.memory = memory.ref;
+      else if (ranked?.context.length) {
+        payload.memoryContext = { ...ranked.scope,
+          refs: ranked.context.map(({ id, updated, kind }) => [id, updated, kind]) };
+      }
+      const { turn } = await api("chat", payload);
       if (session !== requester) return;
       mergeTurns([turn]);
       if (selectedMemory === memory) selectedMemory = null;
+      if (rankedMemory === ranked) rankedMemory = null;
       if (draft.trim() === message) draft = "";
     } catch (err) {
       if (session !== requester) return;
@@ -707,6 +743,7 @@ app.addEventListener("submit", async (event) => {
         return;
       }
       if (err.message === "note_unavailable") selectedMemory = null;
+      if (err.message === "context_stale") rankedMemory = null;
       chatFeedback = errorText(err.message);
     }
     if (session !== requester) return;
@@ -937,6 +974,8 @@ app.addEventListener("click", async (event) => {
   if (action.startsWith("prompt-") && Object.hasOwn(starters(), action.slice(7))) {
     const input = app.querySelector("#draft");
     const suggestion = starters()[action.slice(7)][1];
+    rankedMemory = null;
+    app.querySelector("#ranked-context")?.remove();
     draft = draft ? draft + "\n" + suggestion : suggestion;
     input.value = draft;
     input.focus();
@@ -973,6 +1012,37 @@ app.addEventListener("click", async (event) => {
     downloadArtifact(notesCsv(visibleNotes(), lang), "text/csv;charset=utf-8", "jarvis-notes.csv");
     return;
   }
+  if (page === "main" && action === "memory-rank" && session?.chatAvailable) {
+    const message = draft.trim();
+    if (!message) {
+      app.querySelector("#draft")?.focus();
+      return;
+    }
+    const requester = session;
+    const scope = { projectId: memoryScope(), includeHistory: includeEarlierQuestions };
+    rankedMemory = null;
+    control.disabled = true;
+    try {
+      const { context } = await api("memory/context", { message, ...scope });
+      if (session !== requester || page !== "main" || draft.trim() !== message ||
+          includeEarlierQuestions !== scope.includeHistory || memoryScope() !== scope.projectId) return;
+      rankedMemory = { message, scope, context };
+      chatFeedback = context.length ? "" : t("مورد مرتبطی پیدا نشد.", "No relevant memory found.");
+    } catch (error) {
+      if (session !== requester) return;
+      if (error.message === "auth") returnToGate();
+      chatFeedback = errorText(error.message);
+    } finally {
+      if (control.isConnected) control.disabled = false;
+    }
+    if (session === requester && page === "main") render();
+    return;
+  }
+  if (action === "memory-unrank") {
+    rankedMemory = null;
+    render();
+    return;
+  }
   if (action === "memory-unselect") {
     selectedMemory = null;
     render();
@@ -988,6 +1058,7 @@ app.addEventListener("click", async (event) => {
     const note = visibleNotes().find((item) => item.id === noteAction?.[2]);
     if (!note) return;
     if (noteAction[1] === "share" && session.chatAvailable) {
+      rankedMemory = null;
       selectedMemory = { text: note.text, ref: { id: note.id, updated: note.updated, projectId: memoryScope() } };
       page = "main";
       render();
@@ -1087,7 +1158,9 @@ app.addEventListener("click", async (event) => {
     const name = app.querySelector("#item-name").value.trim();
     if (!name) return;
     if (workspaceMemory()) {
-      await changeWorkspaceMemory({ operation: editingNote ? "edit" : "add", id: editingNote, text: name }, control);
+      await changeWorkspaceMemory({ operation: editingNote ? "edit" : "add",
+        id: editingNote, text: name, kind: app.querySelector("#memory-kind").value,
+        contextAllowed: app.querySelector("#memory-eligible").checked }, control);
       return;
     }
     if (privateProjects()) {
@@ -1242,7 +1315,13 @@ app.addEventListener("click", async (event) => {
   if (personalDocuments() && privateDocuments === null) void updateDocuments();
 });
 app.addEventListener("input", (event) => {
-  if (event.target.id === "draft") draft = event.target.value;
+  if (event.target.id === "draft") {
+    draft = event.target.value;
+    if (rankedMemory) {
+      rankedMemory = null;
+      app.querySelector("#ranked-context")?.remove();
+    }
+  }
   if (event.target.id === "vision-question") vision.input(event.target.value);
   if (event.target.id === "task-title" && taskView) taskView.input = event.target.value;
   if (event.target.id === "reminder-due" && taskView) taskView.reminderInput = event.target.value;
@@ -1252,6 +1331,12 @@ app.addEventListener("input", (event) => {
   }
 });
 app.addEventListener("change", async (event) => {
+  if (event.target.id === "memory-earlier") {
+    includeEarlierQuestions = event.target.checked;
+    rankedMemory = null;
+    app.querySelector("#ranked-context")?.remove();
+    return;
+  }
   if (event.target.id === "vision-file") return vision.choose(event.target.files[0]);
   if (event.target.id === "vision-facing") return vision.facing(event.target.value);
   if (event.target.id === "private-document" && personalDocuments()) {

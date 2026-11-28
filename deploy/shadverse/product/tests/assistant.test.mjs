@@ -322,5 +322,116 @@ test(
     assert.equal(requests.at(-1).body.input, "بدون حافظه");
     assert.equal(requests.at(-1).body.user, requests[0].body.user);
     assert.ok(!(await (await history(owner)).text()).includes("یادداشت پروژه"));
+    const eligibility = { kind: "preference", contextAllowed: true };
+    const save = (text, projectId, options, headers = owner) =>
+      post(
+        "/api/memory",
+        {
+          operation: "add",
+          text,
+          projectId,
+          ...options,
+        },
+        headers,
+      );
+    const approvedNote = "تقویم پروژه: ترجیح رنگ آبی";
+    assert.equal((await save(approvedNote, ownProject, eligibility)).status, 200);
+    assert.equal((await save("تقويم پروژه: ترجیح رنگ آبي", ownProject, eligibility)).status, 409);
+    assert.equal((await save("تقویم پروژه: عبارت خصوصی", ownProject)).status, 200);
+    assert.equal(
+      (await save("تقویم پروژه: حساب دیگر", otherProject, eligibility, other)).status,
+      200,
+    );
+    assert.equal(
+      (
+        await post(
+          "/api/chat",
+          { message: "تقویم پروژه را بازبینی کن", projectId: ownProject },
+          owner,
+        )
+      ).status,
+      200,
+    );
+    const projectScope = { projectId: ownProject, includeHistory: true };
+    const question = "تقويم پروژه چیست؟";
+    const preview = (scope, headers = owner) =>
+      post(
+        "/api/memory/context",
+        {
+          message: question,
+          ...scope,
+        },
+        headers,
+      );
+    const beforePreview = requests.length;
+    assert.equal((await preview(projectScope, other)).status, 403);
+    assert.equal((await preview({ ...projectScope, projectId: otherProject })).status, 400);
+    const personalPreview = await preview({ projectId: null, includeHistory: true });
+    assert.deepEqual((await personalPreview.json()).context, []);
+    const { context } = await (await preview(projectScope)).json();
+    assert.deepEqual(context.map(({ kind, text }) => [kind, text]).sort(), [
+      ["conversation", "تقویم پروژه را بازبینی کن"],
+      ["preference", approvedNote],
+    ]);
+    assert.equal(requests.length, beforePreview, "preview stays local");
+    const refs = context.map(({ id, updated, kind }) => [id, updated, kind]);
+    assert.equal(
+      (
+        await post(
+          "/api/chat",
+          {
+            message: question,
+            memoryContext: { ...projectScope, refs: [[999, 999, "conversation"]] },
+          },
+          owner,
+        )
+      ).status,
+      409,
+    );
+    assert.equal(requests.length, beforePreview);
+    assert.equal(
+      (
+        await post(
+          "/api/chat",
+          {
+            message: question,
+            memoryContext: { ...projectScope, refs },
+          },
+          owner,
+        )
+      ).status,
+      200,
+    );
+    const sent = requests.at(-1).body;
+    assert.match(sent.user, /^shadverse-memory:/u);
+    assert.deepEqual(
+      JSON.parse(sent.input.split("\n")[1]).context,
+      context.map(({ kind, text }) => ({ kind, text })),
+    );
+    const privateAgain = await post(
+      "/api/memory",
+      {
+        operation: "edit",
+        id: context.find(({ kind }) => kind === "preference").id,
+        projectId: ownProject,
+        text: approvedNote,
+        contextAllowed: false,
+      },
+      owner,
+    );
+    assert.equal(privateAgain.status, 200);
+    assert.equal(
+      (
+        await post(
+          "/api/chat",
+          {
+            message: question,
+            memoryContext: { ...projectScope, refs },
+          },
+          owner,
+        )
+      ).status,
+      409,
+    );
   },
 );

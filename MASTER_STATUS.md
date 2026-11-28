@@ -2,7 +2,7 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** P0 · Live acceptance pending private access
+**Active milestone** Functional completion · Intelligent memory and document intelligence
 
 **Verified remote baseline for live integration** `320c5619f2cfa1510453bf362f17d3e31487f5d7`
 
@@ -28,7 +28,7 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | D | Persistent Creator session context | PARTIALLY IMPLEMENTED | OpenClaw keeps its stable Creator session. The product stores completed text and voice turns per Creator and restores them after reload or sign-in. HTTP and Chromium fixtures passed. |
 | D | Explicit personal notes, text search, edit, delete and export | VERIFIED LOCAL | Saved in the private product SQLite store by authenticated owner. The API fixture checked sign-out and sign-in persistence, persisted bytes on a separate database connection, and cross-account read or mutation denial. |
 | D | Project notes and explicit retrieval into Creator text chat | VERIFIED LOCAL | The HTTP Gateway fixture checked personal and project note selection, exact owner/project/revision boundaries and separate sessions for selected-note turns. Live inference remains pending. |
-| D | Preferences, long-term knowledge and managed backup | MISSING | No product integration for these capabilities. |
+| D | Consent-based relevance retrieval, preferences and persistent knowledge | VERIFIED LOCAL | Creator previews up to three relevant eligible notes and optional prior questions from the same owned scope. Exact revisions are checked before dispatch. Managed backup remains a separate milestone. |
 | E | Browser camera, selected-frame screen capture and screenshot upload | VERIFIED LOCAL | Authenticated browser fixture tested permission denial, facing switch, preview, capture, screen shutdown, upload fallback, route navigation and mobile RTL. Real device acceptance is pending. |
 | E | Selected visual context and Persian voice questions | LOCAL FIXTURE; LIVE PENDING | Shared vision endpoint accepts an explicit frame or bounded follow-up. Continuous voice alternates local recognition and synthesis; it never uploads a live feed. |
 | E | Private TXT, Markdown and CSV storage, plain-text preview, download and deletion | VERIFIED LOCAL | The signed-in product API fixture checked exact downloaded bytes, UTF-8 and filename validation, size enforcement, CSRF and cross-account denial. |
@@ -161,3 +161,12 @@ The corrected Phase A archive built and started locally from the reviewed Git tr
 The daily ledger still reserves the catalog context window plus the maximum output before dispatch. It settles on valid measured receipts and retains the reserve when accounting is absent, including cancellation. Text and vision share a UTC-day ledger. A lower input cap has no verified provider-side enforcement across visual turns, image reuse, or automatic runtime activity. Keep the conservative reserve pending measured and enforceable limits.
 
 **Continuation.** Obtain authorized private staging access. Inspect the effective proxy and both runtime configurations read-only. Run the existing Creator preflight before the new separate vision preflight. Keep inference disabled until the exact provider and effective runtime policy are verified. Then run the two-turn synthetic test and collect the redacted usage delta and physical-device evidence.
+
+
+## Intelligent memory checkpoint
+
+Personal and project memory now support ordinary notes, preferences, persistent knowledge and a per-note permission to appear in ranked results. Newly saved and existing notes are private by default. The Creator explicitly requests a local preview for the current question and scope. The UI displays the exact candidate text before Send. Older questions are searched only when selected, and remain restricted to the matching project or personal scope. Changed approvals, stale note revisions, foreign projects and mismatched references fail before dispatch.
+
+The product reuses its private OpenClaw OpenResponses bridge for approved context, in a separate session. Its account-scoped SQLite notes do not migrate into the upstream workspace-wide memory index. Persian/Arabic character normalization supports relevance and duplicate detection without embeddings. Application and HTTP Gateway fixture tests covered access, stale approval, duplicate variants, private defaults and exact dispatch.
+
+**Continuation.** Implement bounded document extraction and genuine artifact generation without routing files to the privileged Creator agent. Private staging and live providers are deferred by Creator decision.

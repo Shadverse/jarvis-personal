@@ -11,9 +11,23 @@ export function openConversations(db) {
     );
     CREATE INDEX IF NOT EXISTS conversation_turns_owner ON conversation_turns(owner, id);
   `);
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    if (
+      !db
+        .prepare("PRAGMA table_info(conversation_turns)")
+        .all()
+        .some(({ name }) => name === "project_id")
+    )
+      db.exec("ALTER TABLE conversation_turns ADD COLUMN project_id TEXT");
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
   const insert = db.prepare(`
-    INSERT INTO conversation_turns (owner, message, reply, created)
-    VALUES (?, ?, ?, ?) RETURNING id, message, reply, created
+    INSERT INTO conversation_turns (owner, message, reply, created, project_id)
+    VALUES (?, ?, ?, ?, ?) RETURNING id, message, reply, created
   `);
   const latest = db.prepare(`
     SELECT id, message, reply, created FROM conversation_turns
@@ -23,9 +37,16 @@ export function openConversations(db) {
     SELECT id, message, reply, created FROM conversation_turns
     WHERE owner=? AND id<? ORDER BY id DESC LIMIT ?
   `);
+  const recentQuestions = db.prepare(`
+    SELECT id, message, created FROM conversation_turns
+    WHERE owner=? AND project_id IS ? AND length(message)<=500 ORDER BY id DESC LIMIT 100
+  `);
   return {
-    record(owner, message, reply) {
-      return insert.get(owner, message, reply, Date.now());
+    recentQuestions(owner, projectId) {
+      return recentQuestions.all(owner, projectId);
+    },
+    record(owner, message, reply, projectId = null) {
+      return insert.get(owner, message, reply, Date.now(), projectId);
     },
     page(owner, before) {
       const rows =
