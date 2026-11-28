@@ -33,7 +33,7 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | E | Selected visual context and Persian voice questions | LOCAL FIXTURE; LIVE PENDING | Shared vision endpoint accepts an explicit frame or bounded follow-up. Continuous voice alternates local recognition and synthesis; it never uploads a live feed. |
 | E | Private TXT, Markdown and CSV storage, plain-text preview, download and deletion | VERIFIED LOCAL | The signed-in product API fixture checked exact downloaded bytes, UTF-8 and filename validation, size enforcement, CSRF and cross-account denial. |
 | E | Restricted OpenResponses vision adapter | LOCAL FIXTURE; LIVE DISABLED BY DEFAULT | Separate port and credential, reviewed config pin, deny-all policy admission, PNG normalization, authorized model selection, usage and session isolation. |
-| E | Document inference, PDFs, structured spreadsheets and visual search | MISSING | Separate authorization and adapter are pending. |
+| E | Private PDF, Office, CSV, text and image processing and downloadable reports | VERIFIED LOCAL | Real library parsing and generated PDF/DOCX/XLSX/PPTX files passed reader checks with synthetic inputs. OCR, model-based reasoning and visual search remain pending. |
 | F | Printable draft documents and personal-note spreadsheets | VERIFIED LOCAL | Standalone HTML and UTF-8 CSV generated in the browser from explicit workspace data. Output escaping and CSV protection passed the local artifact test. |
 | F | Provider-backed image, video, audio, music, presentations and document generation | MISSING | Product capability catalog and generation adapters are absent. |
 | G | Existing private OpenClaw tool and paired-device access | PARTIALLY IMPLEMENTED | The upstream operator path is separate. There is no product permission layer for application launching, files, browser actions, commands, desktop companion, mobile actions or external tools. |
@@ -170,3 +170,10 @@ Personal and project memory now support ordinary notes, preferences, persistent 
 The product reuses its private OpenClaw OpenResponses bridge for approved context, in a separate session. Its account-scoped SQLite notes do not migrate into the upstream workspace-wide memory index. Persian/Arabic character normalization supports relevance and duplicate detection without embeddings. Application and HTTP Gateway fixture tests covered access, stale approval, duplicate variants, private defaults and exact dispatch.
 
 **Continuation.** Implement bounded document extraction and genuine artifact generation without routing files to the privileged Creator agent. Private staging and live providers are deferred by Creator decision.
+
+
+## Document intelligence checkpoint
+
+Workspace files can perform bounded local passage search, extractive summary, two-source comparison and spreadsheet statistics. A private optional worker parses PDF, DOCX, XLSX, PPTX and supported images and generates actual downloadable PDF, Word, Excel and PowerPoint reports with Persian RTL settings. Stored images can be queued to the existing Creator Vision preview by explicit action. No documents, prompts or provider calls leave the product during local analysis. Independent readers opened outputs in the authenticated integration test.
+
+**Next milestone.** Add a fixed, read-only OpenClaw research route with explicit activation and real source citations. Keep all externally sourced material outside the privileged conversation pipeline.

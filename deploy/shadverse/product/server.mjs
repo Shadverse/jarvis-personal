@@ -15,6 +15,8 @@ import {
   sessionAge,
 } from "./auth.mjs";
 import { openConversations } from "./conversations.mjs";
+import { analyzeDocument, documentKind, plainFormats, readDocument } from "./document-analysis.mjs";
+import { loadDocumentProcessor } from "./document-processing.mjs";
 import { documentBodyLimit, openDocuments } from "./documents.mjs";
 import { loadGateway, postResponses, readGatewayJson } from "./gateway.mjs";
 import { openIntegrations } from "./integrations.mjs";
@@ -26,7 +28,8 @@ import { openVision } from "./vision.mjs";
 process.umask(0o077);
 const db = openStore(process.env.JARVIS_STATE);
 const conversations = openConversations(db);
-const documents = openDocuments(db);
+const documentProcessor = await loadDocumentProcessor();
+const documents = openDocuments(db, documentProcessor);
 const actions = openActions(db);
 const memory = openMemory(db);
 const integrations = openIntegrations(db);
@@ -67,6 +70,19 @@ const types = {
 };
 const cookie = (value, age) =>
   `__Host-jarvis=${value}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${age}`;
+const reportTypes = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+function documentErrorStatus(error) {
+  if (error === "file_missing") return 404;
+  if (error === "file_cap") return 409;
+  if (error === "file_busy") return 429;
+  if (error === "file_processor") return 503;
+  return 400;
+}
 function actionStatus({ error }) {
   if (!error) return 200;
   if (["project_cap", "task_cap", "task_closed"].includes(error)) return 409;
@@ -151,12 +167,59 @@ createServer(async (req, res) => {
       }
       if (path === "/api/documents") {
         const id = url.searchParams.get("id");
-        if (id === null) return json(200, { files: documents.list(session.userId) });
+        if (id === null)
+          return json(200, {
+            files: documents.list(session.userId),
+            ...(documentProcessor
+              ? { formats: { read: documentProcessor.read, write: documentProcessor.write } }
+              : {}),
+          });
         const document = documents.get(session.userId, id);
         if (!document) return json(404, { error: "file_missing" });
         const bytes = Buffer.from(document.payload);
+        const report = url.searchParams.get("report");
+        if (report !== null) {
+          if (!documentProcessor?.write.includes(report))
+            return json(503, { error: "file_processor" });
+          const extracted = await readDocument(document, documentProcessor);
+          if (extracted.error) return json(documentErrorStatus(extracted.error), extracted);
+          const analysis = analyzeDocument(document.name, extracted, "");
+          const rtl = url.searchParams.get("lang") !== "en";
+          const lines = analysis.passages.map(({ label, text }) => `${label} · ${text}`);
+          if (analysis.truncated)
+            lines.push(
+              rtl
+                ? "بخشی از محتوا به دلیل محدودیت پردازش حذف شد."
+                : "Processing limits omitted part of the content.",
+            );
+          for (const table of analysis.tables) {
+            lines.push(`${table.label} · ${rtl ? "ردیف‌ها" : "Rows"}: ${table.rowCount}`);
+            for (const column of table.columns)
+              lines.push(
+                `${column.label} · ${rtl ? "تعداد" : "Count"} ${column.count} · ${rtl ? "مجموع" : "Total"} ${column.total ?? "—"} · ${column.min}–${column.max}`,
+              );
+          }
+          const output = await documentProcessor.run({
+            operation: "generate",
+            kind: report,
+            title: document.name,
+            lines: lines.slice(0, 24),
+            tables: extracted.tables,
+            rtl,
+          });
+          if (output.error) return json(documentErrorStatus(output.error), output);
+          res.writeHead(200, {
+            "Content-Type": reportTypes[report],
+            "Content-Disposition": `attachment; filename="jarvis-report.${report}"`,
+          });
+          return res.end(Buffer.from(output.content, "base64"));
+        }
         if (url.searchParams.get("preview") === "1") {
-          return json(200, { name: document.name, text: bytes.toString("utf8") });
+          if (plainFormats.includes(documentKind(document.name)))
+            return json(200, { name: document.name, text: bytes.toString("utf8") });
+          const extracted = await readDocument(document, documentProcessor);
+          if (extracted.error) return json(documentErrorStatus(extracted.error), extracted);
+          return json(200, analyzeDocument(document.name, extracted, ""));
         }
         res.writeHead(200, {
           "Content-Type": "application/octet-stream",
@@ -280,9 +343,32 @@ createServer(async (req, res) => {
       return json(actionStatus(result), result);
     }
     if (manageDocuments) {
-      const error = documents.change(session.userId, body);
-      if (error)
-        return json(error === "file_missing" ? 404 : error === "file_cap" ? 409 : 400, { error });
+      if (body?.operation === "analyze") {
+        if (
+          !Array.isArray(body.ids) ||
+          !body.ids.length ||
+          body.ids.length > 2 ||
+          new Set(body.ids).size !== body.ids.length ||
+          typeof body.question !== "string" ||
+          body.question.length > 500
+        )
+          return json(400, { error: "file_invalid" });
+        const sources = body.ids.map((id) => documents.get(session.userId, id));
+        if (sources.some((document) => !document)) return json(404, { error: "file_missing" });
+        if (rateLimit(db, "documents/" + session.userId, 30)) return json(429, { error: "limit" });
+        const result = [];
+        for (const document of sources) {
+          const extracted = await readDocument(document, documentProcessor);
+          if (extracted.error)
+            return json(documentErrorStatus(extracted.error), { error: extracted.error });
+          result.push(analyzeDocument(document.name, extracted, body.question.trim()));
+        }
+        return json(200, { result });
+      }
+      if (body?.operation === "add" && rateLimit(db, "documents/" + session.userId, 30))
+        return json(429, { error: "limit" });
+      const error = await documents.change(session.userId, body);
+      if (error) return json(documentErrorStatus(error), { error });
       return json(200, { files: documents.list(session.userId) });
     }
     if (previewMemory) {

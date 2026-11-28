@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -7,9 +7,25 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { addUser, invite, openStore } from "../auth.mjs";
 
 test("private UTF-8 document intake preserves bytes and denies cross-account access", async (t) => {
+  const fixtureScript = fileURLToPath(new URL("./document-formats-fixture.py", import.meta.url));
+  let python, fixtures;
+  try {
+    python = execFileSync("python3", ["-I", "-c", "import sys; print(sys.executable)"], {
+      encoding: "utf8",
+    }).trim();
+    fixtures = JSON.parse(
+      execFileSync(python, ["-I", "-B", fixtureScript, "fixtures"], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }),
+    );
+  } catch {
+    t.diagnostic("Optional office/PDF fixture dependencies are unavailable; testing UTF-8 only.");
+  }
   const dir = await mkdtemp(join(tmpdir(), "jarvis-documents-"));
   const db = openStore(dir);
   const password = randomUUID();
@@ -22,7 +38,13 @@ test("private UTF-8 document intake preserves bytes and denies cross-account acc
   await new Promise((resolve) => reserve.close(resolve));
   const origin = "http://localhost:" + port;
   const server = spawn(process.execPath, [new URL("../server.mjs", import.meta.url).pathname], {
-    env: { ...process.env, PORT: String(port), JARVIS_ORIGIN: origin, JARVIS_STATE: dir },
+    env: {
+      ...process.env,
+      PORT: String(port),
+      JARVIS_ORIGIN: origin,
+      JARVIS_STATE: dir,
+      JARVIS_DOCUMENT_PYTHON: fixtures ? python : "",
+    },
   });
   const exit = once(server, "exit");
   t.after(async () => {
@@ -65,7 +87,7 @@ test("private UTF-8 document intake preserves bytes and denies cross-account acc
   assert.equal(document.name, "داده.csv");
   assert.equal(document.bytes, exact.length);
   assert.equal(document.payload, undefined);
-  assert.deepEqual(await (await get(creator)).json(), { files: [] });
+  assert.deepEqual((await (await get(creator)).json()).files, []);
   assert.equal((await get(creator, "?id=" + document.id)).status, 404);
   assert.equal((await get(creator, "?preview=1&id=" + document.id)).status, 404);
   assert.equal(
@@ -92,4 +114,85 @@ test("private UTF-8 document intake preserves bytes and denies cross-account acc
     await (await post("/api/documents", { operation: "delete", id: document.id }, member)).json(),
     { files: [] },
   );
+  const uploadBytes = async (name, content) => {
+    const response = await post("/api/documents", { operation: "add", name, content }, member);
+    assert.equal(response.status, 200, response.status === 200 ? name : await response.text());
+    return (await response.json()).files.find((item) => item.name === name).id;
+  };
+  const csv = await uploadBytes(
+    "آزمون.csv",
+    Buffer.from("نام,مبلغ\nاوریون,۱۲\n=1+2,18").toString("base64"),
+  );
+  const analyze = (ids, question, headers = member) =>
+    post(
+      "/api/documents",
+      {
+        operation: "analyze",
+        ids,
+        question,
+      },
+      headers,
+    );
+  const data = await analyze([csv], "اوریون");
+  const [summary] = (await data.json()).result;
+  assert.equal(summary.passages[0].label, "CSV · 2");
+  assert.deepEqual(summary.tables[0].columns, [
+    { label: "مبلغ", count: 2, total: 30, min: 12, max: 18 },
+  ]);
+  assert.equal((await analyze([csv], "اوریون", creator)).status, 404);
+  if (fixtures) {
+    const ids = {};
+    for (const format of ["pdf", "docx", "xlsx", "pptx", "png"])
+      ids[format] = await uploadBytes("sample." + format, fixtures[format]);
+    for (const [format, question, expected] of [
+      ["pdf", "Orion", "Orion invoice 2048"],
+      ["docx", "اوریون", "شیوهٔ آزمون"],
+      ["pptx", "اوریون", "اسلاید اوریون"],
+    ]) {
+      const response = await analyze([ids[format]], question);
+      assert.equal(response.status, 200);
+      assert.ok((await response.json()).result[0].passages[0].text.includes(expected));
+    }
+    const compared = await analyze([csv, ids.xlsx], "اوریون");
+    assert.deepEqual(
+      (await compared.json()).result.map((source) => source.tables[0].columns[0].total),
+      [30, 30],
+    );
+    const photo = await get(member, "?preview=1&id=" + ids.png);
+    assert.deepEqual((await photo.json()).image, { width: 13, height: 7 });
+    assert.equal(
+      (
+        await post(
+          "/api/documents",
+          { operation: "add", name: "blocked.docx", content: fixtures.bad },
+          member,
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await post(
+          "/api/documents",
+          { operation: "add", name: "spoof.png", content: fixtures.pdf },
+          member,
+        )
+      ).status,
+      400,
+    );
+    assert.equal((await get(creator, "?report=pdf&id=" + csv)).status, 404);
+    const artifacts = {};
+    for (const format of ["pdf", "docx", "xlsx", "pptx"]) {
+      const response = await get(member, "?report=" + format + "&id=" + csv);
+      assert.equal(response.status, 200, format);
+      assert.match(
+        response.headers.get("content-disposition"),
+        new RegExp("jarvis-report\\." + format),
+      );
+      artifacts[format] = Buffer.from(await response.arrayBuffer()).toString("base64");
+    }
+    execFileSync(python, ["-I", "-B", fixtureScript, "verify"], {
+      input: JSON.stringify(artifacts),
+    });
+  }
 });

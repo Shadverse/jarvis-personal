@@ -62,6 +62,10 @@ let projects = [],
   includeEarlierQuestions = false,
   editingNote = null,
   privateDocuments = null,
+  documentFormats = { read: [], write: [] },
+  documentAnalysis = null,
+  documentQuestion = "",
+  documentSecond = "",
   documentPreview = null,
   savedDrafts = [],
   resources = [],
@@ -100,6 +104,10 @@ function clearWorkspace() {
   includeEarlierQuestions = false;
   editingNote = null;
   privateDocuments = null;
+  documentFormats = { read: [], write: [] };
+  documentAnalysis = null;
+  documentQuestion = "";
+  documentSecond = "";
   documentPreview = null;
   savedDrafts = [];
   resources = [];
@@ -391,6 +399,38 @@ function projectTasks() {
     ${error ? `<p role="status">${safe(error)}</p>` : ""}
     ${rows || (!busy && !error ? `<p class="empty">${t("هنوز وظیفه‌ای ثبت نشده است.", "No tasks yet.")}</p>` : "")}</section>`;
 }
+function documentFindings(results) {
+  return results.map(({ name, passages, tables, truncated, image }) => `<section class="stack">
+    <h3><bdi>${safe(name)}</bdi></h3>
+    ${image ? `<p>${t("اندازهٔ تصویر", "Image dimensions")} · ${image.width} × ${image.height}</p>` : ""}
+    ${passages.map(({ label, text }) => `<p><bdi>${safe(label)} · ${safe(text)}</bdi></p>`).join("")}
+    ${tables.map(({ label, rowCount, columns }) => `<div><bdi>${safe(label)} · ${rowCount} ${t("ردیف", "rows")}</bdi>
+      <ul>${columns.map((column) => `<li><bdi>${safe(column.label)} · ${t("تعداد", "Count")} ${column.count} · ${t("مجموع", "Total")} ${column.total ?? "—"} · ${column.min}–${column.max}</bdi></li>`).join("")}</ul></div>`).join("")}
+    ${!passages.length && !image && !tables.length ? `<p>${t("متن قابل استنادی پیدا نشد.", "No supporting text was found.")}</p>` : ""}
+    ${truncated ? `<p>${t("بخشی از محتوا به دلیل محدودیت پردازش حذف شد.", "Processing limits omitted part of the content.")}</p>` : ""}
+  </section>`).join("");
+}
+function documentPanel() {
+  if (!documentPreview) return "";
+  const id = encodeURIComponent(documentPreview.id);
+  return `
+    ${typeof documentPreview.text === "string"
+      ? `<label class="field document-preview"><bdi>${safe(documentPreview.name)}</bdi>
+        <textarea readonly rows="8" dir="auto" aria-label="${t("متن فایل", "File contents")}">${safe(documentPreview.text)}</textarea></label>`
+      : documentFindings([documentPreview])}
+    ${documentPreview.image && session?.role === "creator"
+      ? button("document-vision", t("پیش‌نمایش در بینایی جارویس", "Preview in JARVIS Vision")) : ""}
+    <div class="controls">
+      <label class="field"><input id="document-question" maxlength="500" dir="auto" value="${safe(documentQuestion)}" aria-label="${t("پرسش دربارهٔ سند", "Document question")}" placeholder="${t("پرسش اختیاری دربارهٔ سند", "Optional document question")}"></label>
+      <label>${t("مقایسه با", "Compare with")} <select id="document-compare">
+        <option value="">${t("بدون سند دوم", "No second document")}</option>
+        ${privateDocuments.filter((file) => file.id !== documentPreview.id).map((file) => `<option value="${safe(file.id)}" ${file.id === documentSecond ? "selected" : ""}>${safe(file.name)}</option>`).join("")}</select></label>
+      ${button("document-analyze", t("یافتن بخش‌های مرتبط و آمار", "Find passages and statistics"))}
+    </div>
+    ${documentAnalysis ? documentFindings(documentAnalysis) : ""}
+    ${documentFormats.write.length ? `<div class="controls">${documentFormats.write.map((format) =>
+      `<a class="outline" href="/api/documents?id=${id}&amp;report=${format}&amp;lang=${lang}">${t("دریافت گزارش", "Download report")} ${format.toUpperCase()}</a>`).join("")}</div>` : ""}`;
+}
 function space() {
   const add = tab === "projects" || tab === "memory";
   const editing = workspaceMemory() && visibleNotes().find((note) => note.id === editingNote);
@@ -400,7 +440,7 @@ function space() {
  <h2>${label(tab)}</h2><p class="sub">${privateProjects() ? t("پروژه‌های خصوصی در حساب شما ذخیره می‌شوند.", "Private projects stay in your account.") : workspaceMemory()
    ? t("تنها یادداشت‌هایی که خودتان ذخیره می‌کنید در حساب شما می‌مانند.", "Only notes you save explicitly stay in your account.")
    : personalDocuments()
-     ? t("فایل متنی خصوصی تا ۱ مگابایت. فایل به مدل ارسال نمی‌شود.", "Private text file, up to 1 MiB. Files are not sent to the model.")
+     ? t("فایل خصوصی تا ۱ مگابایت. پردازش سند محلی است.", "Private file, up to 1 MiB. Document processing is local.")
      : t("محتوای محلی این نشست با خروج پاک می‌شود.", "Local session content clears on sign-out.")}</p>
  <div class="controls"><label class="field">${icon("search")}<input type="search" id="search" aria-label="${t("جست‌وجو", "Search")}" value="${safe(query)}" placeholder="${t("جست‌وجو", "Search")}"></label>
  <select id="project-filter" aria-label="${t("پروژهٔ انتخابی", "Active project")}"><option value="">${t("همهٔ پروژه‌ها", "All projects")}</option>${projects.map((n) => `<option ${n === activeProject ? "selected" : ""}>${safe(n)}</option>`).join("")}</select></div>
@@ -410,10 +450,9 @@ function space() {
  ${editing ? button("memory-cancel", t("انصراف", "Cancel"), "outline") : ""}
  ${workspaceMemory() ? `<a href="/api/${safe(memoryPath(memoryScope(), true))}" class="outline">${t("خروجی حافظه", "Export memory")}</a>
    ${visibleNotes().length ? button("memory-csv", t("دریافت جدول CSV", "Download CSV"), "outline") : ""}` : ""}</div>` : ""}
- ${personalDocuments() ? `${privateDocuments === null ? "" : `<input type="file" id="private-document" accept=".txt,.md,.csv" hidden>
+ ${personalDocuments() ? `${privateDocuments === null ? "" : `<input type="file" id="private-document" accept=".txt,.md,.csv,${documentFormats.read.map((kind) => kind === "jpeg" ? ".jpg,.jpeg" : "." + kind).join(",").replace(/^$/u, ".txt")}" hidden>
    ${button("document-upload", icon("attach") + t("ذخیرهٔ فایل خصوصی", "Save private file"))}`}
-   ${documentPreview ? `<label class="field document-preview"><bdi>${safe(documentPreview.name)}</bdi>
-      <textarea readonly rows="8" dir="auto" aria-label="${t("متن فایل", "File contents")}">${safe(documentPreview.text)}</textarea></label>` : ""}`
+   ${documentPanel()}`
    : ["files", "gallery"].includes(tab) ? `<input type="file" id="workspace-file" multiple hidden ${tab === "gallery" ? 'accept="image/png,image/jpeg,image/webp"' : ""}>${button("pick-file", icon("attach") + t("انتخاب فایل محلی", "Choose local file"))}` : ""}
  <div id="results">${listItems()}</div></section>${remindersSection()}${projectTasks()}`
   );
@@ -553,6 +592,8 @@ function errorText(code) {
       "JARVIS could not respond. Try again.",
     ),
     file_invalid: t("فایل متنی UTF-8 با نام معتبر و حداکثر ۱ مگابایت انتخاب کنید.", "Choose a valid UTF-8 text file up to 1 MiB."),
+    file_processor: t("پردازشگر این قالب آماده نیست.", "The processor for this format is unavailable."),
+    file_busy: t("پردازشگر مشغول است. دوباره امتحان کنید.", "The document processor is busy. Try again."),
     file_missing: t("فایل در حساب شما پیدا نشد.", "This file was not found in your account."),
     integration_scope: t("مجوز این اتصال فعال نیست.", "Connector permission is inactive."),
     integration_invalid: t("درخواست اتصال معتبر نیست.", "Invalid connector request."),
@@ -923,9 +964,13 @@ async function updateDocuments(body) {
     if (session !== requester) return;
     if (body?.operation === "view") {
       if (!personalDocuments()) return;
-      documentPreview = result;
+      documentPreview = { ...result, id: body.id };
+      documentAnalysis = null;
+      documentQuestion = "";
+      documentSecond = "";
     } else if (body || privateDocuments === null) {
       privateDocuments = result.files;
+      if (result.formats) documentFormats = result.formats;
       if (body?.operation === "delete") documentPreview = null;
     }
   } catch (error) {
@@ -988,6 +1033,45 @@ app.addEventListener("click", async (event) => {
       feedback = t("پیش‌نویس در این نشست ذخیره شد.", "Draft saved in this session.");
     } else feedback = t("ابتدا متن پیام را بنویسید.", "Write a message first.");
     render();
+    return;
+  }
+  if (personalDocuments() && documentPreview && ["document-analyze", "document-vision"].includes(action)) {
+    const requester = session;
+    const preview = documentPreview;
+    control.disabled = true;
+    try {
+      if (action === "document-analyze") {
+        const other = documentSecond;
+        const question = documentQuestion.trim();
+        const { result } = await api("documents", {
+          operation: "analyze", ids: other ? [preview.id, other] : [preview.id], question,
+        });
+        if (session === requester && personalDocuments() && documentPreview === preview) {
+          documentAnalysis = result;
+          render();
+        }
+      } else if (session.role === "creator" && preview.image) {
+        const response = await fetch("/api/documents?id=" + encodeURIComponent(preview.id));
+        if (!response.ok) throw Error(response.status === 401 ? "auth" : "file_missing");
+        const bytes = await response.blob();
+        if (session === requester && personalDocuments() && documentPreview === preview) {
+          const extension = preview.name.split(".").at(-1).toLowerCase();
+          page = "vision";
+          render();
+          await vision.choose(new File([bytes], preview.name, { type: "image/" + (extension === "jpg" ? "jpeg" : extension) }));
+        }
+      }
+    } catch (error) {
+      if (session === requester) {
+        if (error.message === "auth") returnToGate();
+        else {
+          feedback = errorText(error.message);
+          if (personalDocuments()) render();
+        }
+      }
+    } finally {
+      if (control.isConnected) control.disabled = false;
+    }
     return;
   }
   if (personalDocuments() && action.startsWith("document-")) {
@@ -1322,6 +1406,7 @@ app.addEventListener("input", (event) => {
       app.querySelector("#ranked-context")?.remove();
     }
   }
+  if (event.target.id === "document-question") documentQuestion = event.target.value;
   if (event.target.id === "vision-question") vision.input(event.target.value);
   if (event.target.id === "task-title" && taskView) taskView.input = event.target.value;
   if (event.target.id === "reminder-due" && taskView) taskView.reminderInput = event.target.value;
@@ -1337,6 +1422,7 @@ app.addEventListener("change", async (event) => {
     app.querySelector("#ranked-context")?.remove();
     return;
   }
+  if (event.target.id === "document-compare") documentSecond = event.target.value;
   if (event.target.id === "vision-file") return vision.choose(event.target.files[0]);
   if (event.target.id === "vision-facing") return vision.facing(event.target.value);
   if (event.target.id === "private-document" && personalDocuments()) {
