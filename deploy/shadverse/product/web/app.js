@@ -79,6 +79,7 @@ function stopAudio() {
   }
 }
 function clearWorkspace() {
+  tab = "history";
   workspaceEpoch++;
   projects = [];
   projectsLoaded = false;
@@ -139,8 +140,8 @@ const brand = () =>
   `<div class="brand"><img src="./icon-192.png" alt=""><strong>${productName()}</strong></div>`;
 const language = () =>
   `<button class="outline lang" data-action="lang">${icon("globe")}${t("EN", "فارسی")}</button>`;
-const button = (action, body, cls = "outline") =>
-  `<button type="button" class="${cls}" data-action="${action}">${body}</button>`;
+const button = (action, body, cls = "outline", disabled = false) =>
+  `<button type="button" class="${cls}" data-action="${action}"${disabled ? " disabled" : ""}>${body}</button>`;
 const notice = () => `<p class="notice" role="status">${safe(feedback)}</p>`;
 const previewLabel = () => t("پیش‌نمایش", "Preview");
 const offline = () =>
@@ -187,7 +188,7 @@ function home() {
  ${historyError ? `<p role="status">${safe(historyError)}</p>` : ""}
  ${turns.length ? `<ol class="thread" aria-label="${t("پیام‌های گفت‌وگو", "Conversation messages")}">${turns.map(({ message, reply }) => `<li class="turn human"><strong>${t("شما", "You")}</strong><p>${safe(message)}</p></li><li class="turn assistant"><strong>${productName()}</strong><p>${safe(reply)}</p></li>`).join("")}</ol>` : ""}
  <form id="conversation" class="composer glass"><textarea id="draft" maxlength="4000" aria-label="${t("پیام", "Message")}" placeholder="${t("برای جارویس شادوِرس بنویسید…", "Write your message…")}">${safe(draft)}</textarea>
- ${connected && selectedMemory ? `<div class="controls"><bdi>${t("یادداشت همراه این پیام به مدل تنظیم‌شده ارسال می‌شود", "Note sent to the configured model with this message")} · ${safe(selectedMemory.text)}</bdi>${button("memory-unselect", t("برداشتن یادداشت", "Remove selected note"))}</div>` : ""}
+ ${connected && selectedMemory ? `<div class="controls selected-memory"><bdi>${t("یادداشت همراه این پیام به مدل تنظیم‌شده ارسال می‌شود", "Note sent to the configured model with this message")} · ${safe(selectedMemory.text)}</bdi>${button("memory-unselect", t("برداشتن یادداشت", "Remove selected note"))}</div>` : ""}
  <div id="attachments">${files.map((f, i) => `<span class="chip"><bdi>${safe(f.name)}</bdi>${button("remove-" + i, icon("close"), "remove")}</span>`).join("")}</div>
  <div class="tools">${button("attach", icon("attach"), "iconbtn")}<input type="file" multiple id="file" hidden>${button("save-draft", icon("layers") + t("ذخیرهٔ پیش‌نویس", "Save draft"), "textbtn")}
  ${button("voice", icon("wave") + label("voice"), "voicebtn")}<button type="submit" class="primary send" ${connected && !sending ? "" : "disabled"} aria-label="${t("ارسال", "Send")}">${icon("send")}</button></div></form>
@@ -342,19 +343,19 @@ function projectTasks() {
     return `<div class="work-row"><bdi>${safe(task.title)}</bdi>
       <span>${completed ? t("انجام شد", "Completed") : t("باز", "Open")}</span>
       ${task.due === null ? "" : `<bdi>${safe(reminderDate(task.due))}</bdi>`}
-      ${button("task-toggle-" + task.id, completed ? t("بازگشایی", "Reopen") : t("تکمیل", "Complete"), "outline")}
+      ${button("task-toggle-" + task.id, completed ? t("بازگشایی", "Reopen") : t("تکمیل", "Complete"), "outline", busy)}
       ${completed ? "" : button("reminder-edit-" + task.id, t("تنظیم یادآور", "Set reminder"))}
-      ${task.due === null ? "" : button("reminder-cancel-" + task.id, t("لغو یادآور", "Cancel reminder"))}</div>
+      ${task.due === null ? "" : button("reminder-cancel-" + task.id, t("لغو یادآور", "Cancel reminder"), "outline", busy)}</div>
       ${reminderId !== task.id || completed ? "" : `<div class="controls">
       <label class="field"><input id="reminder-due" type="datetime-local" value="${safe(reminderInput)}" aria-label="${t("زمان محلی یادآور", "Reminder local time")}"></label>
-      ${button("reminder-save", t("ذخیرهٔ یادآور", "Save reminder"))}
+      ${button("reminder-save", t("ذخیرهٔ یادآور", "Save reminder"), "outline", busy)}
       ${button("reminder-close", t("انصراف", "Close reminder editor"))}</div>`}`;
   }).join("");
   return `<section class="surface stack" aria-busy="${busy}">
     <h3>${t("وظایف پروژه", "Project tasks")} · <bdi>${safe(name)}</bdi></h3>
     <div class="controls">${button("tasks-close", t("بستن وظایف", "Close tasks"), "outline")}
     <label class="field"><input id="task-title" dir="auto" maxlength="200" value="${safe(input)}" aria-label="${t("عنوان وظیفه", "Task title")}" placeholder="${t("عنوان وظیفه", "Task title")}"></label>
-    ${button("task-add", t("افزودن وظیفه", "Add task"), "outline")}</div>
+    ${button("task-add", t("افزودن وظیفه", "Add task"), "outline", busy)}</div>
     ${error ? `<p role="status">${safe(error)}</p>` : ""}
     ${rows || (!busy && !error ? `<p class="empty">${t("هنوز وظیفه‌ای ثبت نشده است.", "No tasks yet.")}</p>` : "")}</section>`;
 }
@@ -375,9 +376,9 @@ function space() {
  ${editing ? button("memory-cancel", t("انصراف", "Cancel"), "outline") : ""}
  ${workspaceMemory() ? `<a href="/api/${safe(memoryPath(memoryScope(), true))}" class="outline">${t("خروجی حافظه", "Export memory")}</a>
    ${visibleNotes().length ? button("memory-csv", t("دریافت جدول CSV", "Download CSV"), "outline") : ""}` : ""}</div>` : ""}
- ${personalDocuments() ? `<input type="file" id="private-document" accept=".txt,.md,.csv" hidden>
-   ${button("document-upload", icon("attach") + t("ذخیرهٔ فایل خصوصی", "Save private file"))}
-   ${documentPreview ? `<label class="field"><bdi>${safe(documentPreview.name)}</bdi>
+ ${personalDocuments() ? `${privateDocuments === null ? "" : `<input type="file" id="private-document" accept=".txt,.md,.csv" hidden>
+   ${button("document-upload", icon("attach") + t("ذخیرهٔ فایل خصوصی", "Save private file"))}`}
+   ${documentPreview ? `<label class="field document-preview"><bdi>${safe(documentPreview.name)}</bdi>
       <textarea readonly rows="8" dir="auto" aria-label="${t("متن فایل", "File contents")}">${safe(documentPreview.text)}</textarea></label>` : ""}`
    : ["files", "gallery"].includes(tab) ? `<input type="file" id="workspace-file" multiple hidden ${tab === "gallery" ? 'accept="image/png,image/jpeg,image/webp"' : ""}>${button("pick-file", icon("attach") + t("انتخاب فایل محلی", "Choose local file"))}` : ""}
  <div id="results">${listItems()}</div></section>${remindersSection()}${projectTasks()}`
@@ -823,7 +824,15 @@ async function loadWorkspaceMemory() {
     if (error.message === "auth") returnToGate();
     else feedback = errorText(error.message);
   }
-  if (session === requester && workspaceMemory()) render();
+  if (session === requester && workspaceMemory()) {
+    const field = app.querySelector("#item-name");
+    const value = field?.value;
+    const focused = field && document.activeElement === field;
+    render();
+    const next = app.querySelector("#item-name");
+    if (next && value !== undefined) next.value = value;
+    if (focused) next?.focus();
+  }
 }
 async function changeWorkspaceMemory(body, control) {
   const requester = session;

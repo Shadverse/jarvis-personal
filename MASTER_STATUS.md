@@ -2,9 +2,9 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Product integration · History and scoped Creator memory
+**Active milestone** Product integration · Pending authorized staging acceptance
 
-**Latest verified remote checkpoint before Phase I** `72b5020e4923de9ef4ccfa96b711147d4a474703`
+**Latest verified remote checkpoint before the mobile integration fix** `b9cb2abd27cdca186a67d4799fab4462c1910a8f`
 
 **Phase A live acceptance** PENDING. The Phase A checkpoint is on the remote branch.
 **Graphics** Frozen. The current interface and isolated hologram preview are retained.
@@ -46,7 +46,7 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | K | Registration-code activation and Creator credential separation | PARTIALLY IMPLEMENTED | Activation is enforced. The Creator bridge denies member accounts. Commercial isolated runtimes are an approved architecture, with implementation pending. |
 | K | Entitlements, model restrictions, limits, lifecycle, isolated tenants and payments | MISSING | No server-enforced commercial subscription or billing pipeline. |
 | L | Reliability and readiness | PARTIALLY IMPLEMENTED | Existing startup validation and local regression coverage. Operational health, backup restore and shutdown acceptance are pending. |
-| Cross-cutting | Persian-first, RTL, headings, branding and accessible mobile interaction | PARTIALLY IMPLEMENTED | Persian Gate and direction handling are implemented. Prior browser coverage found an existing narrow-mobile composer layout failure. No design changes during the freeze. |
+| Cross-cutting | Persian-first, RTL, headings, branding and accessible mobile interaction | PARTIALLY IMPLEMENTED | Persian Gate and direction handling are implemented. Authenticated Chromium verified a single composer row and no horizontal overflow at 320, 360, 390 and 393 CSS pixels in Persian and English. The 320-pixel file preview and Workspace controls were exercised. |
 
 No production deployment, database migration, credential grant, or paid-provider activation is part of this milestone.
 
@@ -117,7 +117,7 @@ Monitor & Tools exposes a SHADVERSE Workspace connector that reads only the sign
 
 ## Phase I checkpoint
 
-Authenticated users can set or cancel one reminder for a task in their own project. The server accepts a future timestamp within 366 days and persists it as an epoch in milliseconds. A due reminder appears in Projects when the view loads or task data refreshes. A completed task suppresses its reminder. Reopening restores the reminder unless it was canceled. No worker, external notification, provider call or unattended action runs. The isolated HTTP fixture covered separate accounts, a future timestamp, a deterministic overdue record, completed-task suppression, and cancellation. Browser date entry awaits private staging acceptance.
+Authenticated users can set or cancel one reminder for a task in their own project. The server accepts a future timestamp within 366 days and persists it as an epoch in milliseconds. A due reminder appears in Projects when the view loads or task data refreshes. A completed task suppresses its reminder. Reopening restores the reminder unless it was canceled. No worker, external notification, provider call or unattended action runs. The isolated HTTP fixture covered separate accounts, a future timestamp, a deterministic overdue record, completed-task suppression, and cancellation. Browser date entry and acknowledgement passed a local Chromium fixture. Private staging acceptance remains pending.
 
 Acknowledgement is scoped to the owner, project, task, and displayed deadline. It survives a fresh login and rescheduling clears it. The targeted HTTP fixture used private SQLite and synthetic accounts, including a direct persisted-state check.
 
@@ -132,3 +132,8 @@ Product history records completed text and voice turns after successful Gateway 
 ## Scoped memory retrieval checkpoint
 
 Workspace → Memory supports personal notes and notes linked to a persisted private project. Selecting a note shows its text in the Creator composer. Sending explicitly shares one exact saved revision with the configured model, through an isolated Gateway session for that turn. Ordinary turns keep the normal stable session. The server enforces account, project and revision and rejects stale, foreign and wrongly scoped references before dispatch. Request context is included in managed route sizing. Product history stores the visible message and reply without adding the note text to its stored request. A reply may contain material from the shared note, and OpenClaw may retain the separate turn under its own storage policy.
+
+
+## Workspace integration and narrow-mobile checkpoint
+
+The authenticated Chromium flow connects project creation, task creation, reminder scheduling and acknowledgement, scoped memory selection, a fixture-backed Creator response, reload restoration, file upload and literal preview. It then signs in as a second user and checks project and file separation. The composer retains all four controls in one row at the tested narrow widths. Workspace rows wrap without losing hit targets and file preview stays within its column. No renderer, brand styles or media changed. All Gateway and speech fixture results are local evidence.
