@@ -2,9 +2,9 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Phase G · Private project tasks
+**Active milestone** Phase H · Local integration grants
 
-**Latest verified remote checkpoint before project tasks** `a19cb8a384eedc9aef086451f856ab6860b2eec9`
+**Latest verified remote checkpoint before Phase H** `e3a0e5ec661ea166af3d24d606309f951ed9e51e`
 
 **Phase A live acceptance** PENDING. The Phase A checkpoint is on the remote branch.
 **Graphics** Frozen. The current interface and isolated hologram preview are retained.
@@ -35,7 +35,8 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | G | Account-scoped project creation and listing | VERIFIED LOCAL | Workspace registers one explicit local action. Isolation, limits, CSRF and idempotent creation passed the HTTP fixture. |
 | G–I | Private project tasks | VERIFIED LOCAL | The API fixture checked explicit creation, completion and reopening, with project and account isolation. |
 | G–I | Automatic, device and scheduled execution | MISSING | No assistant-driven execution, device companion or scheduler. |
-| H | Email, calendar, web search, GitHub, cloud storage, messaging, APIs and MCP integrations | MISSING | Product connector authorization, scoped accounts and permission UI are absent. |
+| H | Local Workspace connector grants | VERIFIED LOCAL | One read-only account-scoped connector has a 15-minute grant, explicit revocation, and usage count. The fixture checked denial of unapproved scopes and connectors. |
+| H | Email, calendar, web search, GitHub, cloud storage, messaging, APIs and MCP integrations | DISABLED | Catalog entries are unavailable. Official provider authorization, external adapters and credentials are pending. |
 | I | Reminders, schedules, workflows, triggers, job execution and recovery, cancellation, notifications, audit and emergency stop | MISSING | No product job subsystem. Existing OpenClaw scheduling has no SHADVERSE admission or lifecycle integration. |
 | J | Creator role, read-only directory and operator registration codes and revocation | PARTIALLY IMPLEMENTED | Creator and member roles are present. Operator commands and the directory cover limited administration. |
 | J | Administrator role, suspension, provider and permission management, usage, spend, audit, security monitoring and emergency controls | MISSING | Product enforcement and administrative operations are absent. |
@@ -91,7 +92,7 @@ Signed-in Workspace → Files supports explicit UTF-8 text upload, literal previ
 
 ## Phase F checkpoint
 
-Workspace → Drafts exports the selected draft as standalone printable HTML with Persian RTL support. Workspace → Memory exports the account’s explicit notes as UTF-8 CSV. The targeted artifact test checked Persian text, HTML escaping, script blocking and spreadsheet formula neutralization. Both exports run in the browser.
+Workspace → Conversations exports the selected saved draft as standalone printable HTML with Persian RTL support. Workspace → Memory exports the account’s explicit notes as UTF-8 CSV. The targeted artifact test checked Persian text, HTML escaping, script blocking and spreadsheet formula neutralization. Both exports run in the browser.
 
 **Next independent milestone.** Start Phase G with an account-scoped project action and use the existing workspace.
 
@@ -103,3 +104,10 @@ Workspace → Projects uses the authenticated action registry to create and list
 The follow-up checkpoint adds Workspace → Projects → Tasks. It supports creating, listing, completing and reopening tasks and caps storage at 100 tasks per project. The targeted HTTP fixture verified the Persian title, exact project and account scope, persisted completion, repeat completion and reopening. Browser controls are pending staging acceptance. Deletion, scheduling, and model-triggered actions remain outside this checkpoint.
 
 **Next implementation step.** Start Phase H with the disconnected integration catalog and an authenticated account-owned grant lifecycle. Verify consent scope, expiry and revocation using a local fixture. Keep real outbound connectors disabled until official authorization is available.
+
+
+## Phase H checkpoint
+
+Monitor & Tools exposes a SHADVERSE Workspace connector that reads only the signed-in account’s project count. A 15-minute grant requires explicit consent. Revocation is immediate on the server. The API returns credential-free metadata, last use and a cumulative count, and leaves every external connector unavailable. One synthetic HTTP test checked expiry, revocation, ownership, CSRF, narrow scope, absence of a synthetic external connection and correct read accounting. Browser controls await private staging acceptance.
+
+**Next independent milestone.** In Phase I, add an account-scoped reminder for an existing project task. Store its due time, expose explicit create and cancel controls, and surface due reminders on the authenticated Workspace page. Verify ownership, deterministic clock behavior and cancellation locally before adding any worker or outbound notification.

@@ -24,6 +24,8 @@ let tab = "history",
   demoState = "idle",
   users = null,
   modelRegistry = null,
+  connectorState = null,
+  connectorBusy = false,
   micState = "";
 const t = (fa, en) => (lang === "fa" ? fa : en);
 const safe = (value) =>
@@ -76,6 +78,8 @@ function clearWorkspace() {
   projectsLoaded = false;
   projectIds.clear();
   taskView = null;
+  connectorState = null;
+  connectorBusy = false;
   activeProject = "";
   notes = [];
   personalNotes = null;
@@ -339,6 +343,21 @@ function space() {
  <div id="results">${listItems()}</div></section>${projectTasks()}`
   );
 }
+function workspaceConnector() {
+  if (!session || review || !connectorState) return "";
+  const connector = connectorState.connectors.find(({ id }) => id === "shadverse-workspace");
+  if (!connector) return "";
+  const granted = connector.status === "granted" && connector.expires > Date.now();
+  return `<section class="surface stack" aria-busy="${connectorBusy}">
+    <h2>${t("اتصال فضای کار شادوِرس", "SHADVERSE Workspace connector")}</h2>
+    <p class="sub">${t("دسترسی محلی و فقط خواندنی به تعداد پروژه‌های حساب، به مدت ۱۵ دقیقه.", "Local, read-only access to your project count for 15 minutes.")}</p>
+    <div class="controls">${granted
+      ? button("connector-read", t("خواندن تعداد پروژه‌ها", "Read project count")) +
+        button("connector-revoke", t("لغو دسترسی", "Revoke access"))
+      : button("connector-grant", t("اجازهٔ خواندن تعداد پروژه‌ها", "Allow reading project count"))}</div>
+    ${!granted || connectorState.projectCount === undefined ? "" : `<output>${t("تعداد پروژه‌ها", "Projects")} · <bdi>${safe(connectorState.projectCount)}</bdi></output>`}
+    </section>`;
+}
 function monitor() {
   const cards = [
     [t("پردازش تصویر", "Renderer"), lastPortrait?.renderer ?? "—"],
@@ -354,7 +373,7 @@ function monitor() {
     title("monitor") +
     `<section class="surface stack"><h2>${t("زمان هر فریم مرورگر", "Browser frame interval")}</h2><p class="sub">${t("اندازه‌گیری زنده در همین زبانه", "Live measurements from this tab")}</p>
  <div class="instrument" id="scope"><div class="split"><output dir="auto">—</output><button class="outline" type="button" aria-pressed="false">${t("مکث", "Pause")}</button></div><canvas tabindex="0" aria-label="${t("نمودار زمان فریم؛ برای مرور از کلیدهای جهت استفاده کنید.", "Frame interval chart. Inspect with arrow keys.")}"></canvas><dl class="trace-stats"><div><dt>${t("میانه", "Median")}</dt><dd data-stat="median">—</dd></div><div><dt>${t("بیشینه", "Peak")}</dt><dd data-stat="peak">—</dd></div><div><dt>${t("بازهٔ ثبت", "Window")}</dt><dd data-stat="window">—</dd></div></dl><p class="trace-detail"></p></div>
- <div class="readouts">${cards.map(([k, v]) => `<div><span>${k}</span><bdi>${safe(v)}</bdi></div>`).join("")}</div></section>`
+ <div class="readouts">${cards.map(([k, v]) => `<div><span>${k}</span><bdi>${safe(v)}</bdi></div>`).join("")}</div></section>` + workspaceConnector()
   );
 }
 function plans() {
@@ -458,6 +477,8 @@ function errorText(code) {
     ),
     file_invalid: t("فایل متنی UTF-8 با نام معتبر و حداکثر ۱ مگابایت انتخاب کنید.", "Choose a valid UTF-8 text file up to 1 MiB."),
     file_missing: t("فایل در حساب شما پیدا نشد.", "This file was not found in your account."),
+    integration_scope: t("مجوز این اتصال فعال نیست.", "Connector permission is inactive."),
+    integration_invalid: t("درخواست اتصال معتبر نیست.", "Invalid connector request."),
     project_missing: t("پروژه در حساب شما پیدا نشد.", "This project was not found in your account."),
     task_missing: t("این وظیفه در پروژه پیدا نشد.", "This task was not found in the project."),
     task_invalid: t("عنوان معتبر وظیفه را وارد کنید.", "Enter a valid task title."),
@@ -626,6 +647,32 @@ app.addEventListener("submit", async (event) => {
   }
   render();
 });
+async function updateConnector(operation) {
+  if (connectorBusy) return;
+  const requester = session;
+  connectorBusy = true;
+  try {
+    const body = operation && { operation, connector: "shadverse-workspace", scope: "projects:count" };
+    const result = await api("integrations", body);
+    if (session === requester) connectorState = result;
+  } catch (error) {
+    if (session !== requester || page !== "monitor") return;
+    if (error.message === "auth") {
+      returnToGate();
+      return;
+    }
+    if (error.message === "integration_scope" && connectorState) {
+      connectorState.connectors[0].status = "not_granted";
+      delete connectorState.projectCount;
+    }
+    feedback = errorText(error.message);
+  } finally {
+    if (session === requester) {
+      connectorBusy = false;
+      if (page === "monitor") render();
+    }
+  }
+}
 async function updateProjects(name, control) {
   const requester = session;
   if (control) control.disabled = true;
@@ -842,6 +889,12 @@ app.addEventListener("click", async (event) => {
       return;
     }
   }
+  if (page === "monitor" && session && !review && action.startsWith("connector-")) {
+    control.disabled = true;
+    await updateConnector(action.slice("connector-".length));
+    if (control.isConnected) control.disabled = false;
+    return;
+  }
   if (action === "add-item") {
     const name = app.querySelector("#item-name").value.trim();
     if (!name) return;
@@ -993,6 +1046,7 @@ app.addEventListener("click", async (event) => {
     }
   }
   render();
+  if (action === "monitor" && session && !review) void updateConnector();
   if (privateProjects() && !projectsLoaded) void updateProjects();
   if (personalMemory() && personalNotes === null) void loadPersonalMemory();
   if (personalDocuments() && privateDocuments === null) void updateDocuments();

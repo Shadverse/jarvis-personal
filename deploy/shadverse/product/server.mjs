@@ -15,6 +15,7 @@ import {
 } from "./auth.mjs";
 import { documentBodyLimit, openDocuments } from "./documents.mjs";
 import { loadGateway, postResponses, readGatewayJson } from "./gateway.mjs";
+import { openIntegrations } from "./integrations.mjs";
 import { openMemory } from "./memory.mjs";
 import { createModelRegistry, loadModelPolicy, readUsage } from "./models.mjs";
 process.umask(0o077);
@@ -22,6 +23,7 @@ const db = openStore(process.env.JARVIS_STATE);
 const memory = openMemory(db);
 const documents = openDocuments(db);
 const actions = openActions(db);
+const integrations = openIntegrations(db);
 const port = Number(process.env.PORT || 3000);
 const origin = new URL(process.env.JARVIS_ORIGIN || `http://localhost:${port}`);
 if (
@@ -103,6 +105,7 @@ createServer(async (req, res) => {
     if (req.method === "GET") {
       if (!session) return json(401, { error: "auth" });
       if (path === "/api/session") return json(200, sessionInfo(session));
+      if (path === "/api/integrations") return json(200, integrations.list(session.userId));
       if (path === "/api/actions") {
         const projectId = url.searchParams.get("project");
         if (projectId === null) return json(200, actions.list(session.userId));
@@ -152,12 +155,14 @@ createServer(async (req, res) => {
     const manageMemory = path === "/api/memory";
     const manageDocuments = path === "/api/documents";
     const executeAction = path === "/api/actions";
+    const manageIntegrations = path === "/api/integrations";
     if (
       chat ||
       manageModels ||
       manageMemory ||
       manageDocuments ||
       executeAction ||
+      manageIntegrations ||
       path === "/api/logout"
     ) {
       if (!session) {
@@ -189,6 +194,10 @@ createServer(async (req, res) => {
       body = JSON.parse(Buffer.concat(chunks));
     } catch {
       return json(400, { error: "invalid" });
+    }
+    if (manageIntegrations) {
+      const result = integrations.execute(session.userId, body);
+      return json(result.error === "integration_scope" ? 403 : result.error ? 400 : 200, result);
     }
     if (executeAction) {
       const result = actions.execute(session.userId, body);
