@@ -35,18 +35,18 @@ Use `node manage.mjs invite` privately to issue a one-use member code valid for 
 | Screen         | Implemented here                                                                                   | Requires later integration                                               |
 | -------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | Gate           | Username and password, one-time registration-code activation, server-side session and logout       | Public HTTPS proxy cutover and live account sign-in proof                |
-| Assistant      | Creator text chat through private OpenClaw, prompt starters, local drafts and attachment selection | Uploaded attachments, in-app access to existing transcripts, member chat |
+| Assistant      | Creator text chat through private OpenClaw, prompt starters, local drafts and attachment selection | Uploaded attachments, import of older Gateway transcripts, member chat |
 | Voice          | Browser microphone analysis and analysed prerecorded audio                                         | Speech recognition and live replies             |
 | Workspace      | Session projects, notes, draft history, local file inventory, thumbnails and search                | Tenant-authorized storage and retrieval                                  |
 | Subscription   | Free, Pro and Ultra views with monthly and annual terms                                            | Entitlements, metering and purchases                                     |
 | Monitoring     | Live browser frame trace, statistics, pause and keyboard inspection                                | Server and billing telemetry                                             |
 | Administration | Creator-only account directory, operator CLI for codes and session revocation                      | Additional administrative operations in the browser                      |
 
-Drafts, selections and displayed turns live in page memory and clear at sign-out. OpenClaw keeps the conversation on its existing storage path, using a dedicated session for the configured Creator. Existing paired-device tools and conversations remain on the private Control UI. The service worker stores no application data.
+Drafts and selections clear at sign-out. The product restores completed text and voice turns for the signed-in Creator from private SQLite. OpenClaw keeps the conversation on its existing storage path, using a dedicated session for the configured Creator. Existing paired-device tools and conversations remain on the private Control UI. The service worker stores no application data.
 
 ## Private text files and memory
 
-In a signed-in workspace with no project selected, **Memory** saves explicit notes for the account. **Files** accepts UTF-8 TXT, Markdown and CSV for private storage, literal-text preview and download. Limits are 1 MiB per document, 10 MiB and 50 files per account. Deletion asks for confirmation. Files are kept in the owner-only product database and are not passed to OpenClaw. The preview doesn't interpret Markdown, CSV formulas or executable markup.
+In a signed-in workspace, **Memory** saves explicit personal notes or notes under the selected private project. The Creator can select one exact saved revision for the next text message. Sending shares that note with the configured model in a separate Gateway session. The product transcript saves the visible message and reply, and the reply can quote the note. OpenClaw may retain the selected-note turn on its existing storage path. **Files** accepts UTF-8 TXT, Markdown and CSV for private storage, literal-text preview and download. Limits are 1 MiB per document, 10 MiB and 50 files per account. Deletion asks for confirmation. Files are kept in the owner-only product database and are not passed to OpenClaw. The preview doesn't interpret Markdown, CSV formulas or executable markup.
 
 For larger uploads during private staging, allow up to 1400 KiB of request body specifically at `/api/documents` in the staging proxy. The application independently enforces the decoded limit and account quota. Use protected staging storage and synthetic test files.
 

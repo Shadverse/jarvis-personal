@@ -251,5 +251,76 @@ test(
       requests.slice(6).map((item) => item.body),
       [{}, {}],
     );
+    const owner = restored.headers;
+    const read = (path, headers) => fetch(origin + path, { headers });
+    const project = async (headers, name) => {
+      const response = await post(
+        "/api/actions",
+        { action: "project.create", input: { name } },
+        headers,
+      );
+      assert.equal(response.status, 200);
+      return (await response.json()).project.id;
+    };
+    const add = async (text, projectId, headers = owner) => {
+      const response = await post("/api/memory", { operation: "add", text, projectId }, headers);
+      assert.equal(response.status, 200);
+      const { id, updated } = (await response.json()).notes.find((note) => note.text === text);
+      return { id, updated, projectId };
+    };
+    const ownProject = await project(owner, "پروژهٔ سازنده");
+    const otherProject = await project(other, "پروژهٔ دیگر");
+    const personal = await add("یادداشت شخصی", null);
+    const scoped = await add("یادداشت پروژه", ownProject);
+    const otherRef = await add("حافظهٔ حساب دیگر", otherProject, other);
+
+    assert.equal((await read("/api/memory?project=" + ownProject, other)).status, 404);
+    assert.deepEqual(
+      (await (await read("/api/memory", owner)).json()).notes.map(({ id }) => id),
+      [personal.id],
+    );
+    assert.equal(
+      (await post("/api/memory", { operation: "delete", id: scoped.id }, owner)).status,
+      404,
+    );
+    const dispatchCount = requests.length;
+    for (const ref of [
+      otherRef,
+      { ...scoped, projectId: null },
+      { ...personal, projectId: ownProject },
+      { ...scoped, text: "forged" },
+    ]) {
+      assert.equal((await post("/api/chat", { message: "سلام", memory: ref }, owner)).status, 404);
+    }
+    assert.equal(requests.length, dispatchCount);
+    const marker = "برای یادداشت بنویس";
+    for (const [ref, note] of [
+      [personal, "یادداشت شخصی"],
+      [scoped, "یادداشت پروژه"],
+    ]) {
+      const response = await post("/api/chat", { message: marker, memory: ref }, owner);
+      assert.equal(response.status, 200);
+      const { turn } = await response.json();
+      assert.equal(turn.message, marker);
+      assert.ok(!JSON.stringify(turn).includes(note));
+      const sent = requests.at(-1).body;
+      assert.match(sent.user, /^shadverse-memory:[a-f0-9-]+$/);
+      assert.deepEqual(JSON.parse(sent.input.split("\n")[1]), {
+        request: marker,
+        selectedNote: note,
+      });
+    }
+    assert.notEqual(requests.at(-1).body.user, requests.at(-2).body.user);
+    const edit = await post(
+      "/api/memory",
+      { operation: "edit", projectId: ownProject, id: scoped.id, text: "ویرایش" },
+      owner,
+    );
+    assert.equal(edit.status, 200);
+    assert.equal((await post("/api/chat", { message: marker, memory: scoped }, owner)).status, 404);
+    assert.equal((await post("/api/chat", { message: "بدون حافظه" }, owner)).status, 200);
+    assert.equal(requests.at(-1).body.input, "بدون حافظه");
+    assert.equal(requests.at(-1).body.user, requests[0].body.user);
+    assert.ok(!(await (await history(owner)).text()).includes("یادداشت پروژه"));
   },
 );

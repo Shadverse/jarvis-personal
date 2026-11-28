@@ -189,9 +189,9 @@ export function createModelRegistry(db, policy) {
       else db.prepare("DELETE FROM model_pauses WHERE id=?").run(id);
       return true;
     },
-    reserve(message, exclude, now = Date.now()) {
+    reserve(message, exclude, input = message, now = Date.now()) {
       const task = taskFor(message);
-      const persian = /[\u0600-\u06ff]/u.test(message);
+      const persian = /[\u0600-\u06ff]/u.test(input);
       db.exec("BEGIN IMMEDIATE");
       try {
         const remaining = policy.dailyTokens - use(now).chargedTokens;
@@ -206,7 +206,7 @@ export function createModelRegistry(db, policy) {
               route.health !== "busy" &&
               (!persian || route.languages.includes("fa")) &&
               (route.tasks.includes(task) || route.tasks.includes("chat")) &&
-              Buffer.byteLength(message) + route.maxOutputTokens <= route.contextWindow,
+              Buffer.byteLength(input) + route.maxOutputTokens <= route.contextWindow,
           )
           .sort(
             (a, b) =>

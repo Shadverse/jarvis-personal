@@ -54,7 +54,9 @@ let projects = [],
   dueReminders = [],
   activeProject = "",
   notes = [],
-  personalNotes = null,
+  memoryNotes = [],
+  loadedMemoryScope,
+  selectedMemory = null,
   editingNote = null,
   privateDocuments = null,
   documentPreview = null,
@@ -87,7 +89,9 @@ function clearWorkspace() {
   connectorBusy = false;
   activeProject = "";
   notes = [];
-  personalNotes = null;
+  memoryNotes = [];
+  loadedMemoryScope = undefined;
+  selectedMemory = null;
   editingNote = null;
   privateDocuments = null;
   documentPreview = null;
@@ -183,6 +187,7 @@ function home() {
  ${historyError ? `<p role="status">${safe(historyError)}</p>` : ""}
  ${turns.length ? `<ol class="thread" aria-label="${t("پیام‌های گفت‌وگو", "Conversation messages")}">${turns.map(({ message, reply }) => `<li class="turn human"><strong>${t("شما", "You")}</strong><p>${safe(message)}</p></li><li class="turn assistant"><strong>${productName()}</strong><p>${safe(reply)}</p></li>`).join("")}</ol>` : ""}
  <form id="conversation" class="composer glass"><textarea id="draft" maxlength="4000" aria-label="${t("پیام", "Message")}" placeholder="${t("برای جارویس شادوِرس بنویسید…", "Write your message…")}">${safe(draft)}</textarea>
+ ${connected && selectedMemory ? `<div class="controls"><bdi>${t("یادداشت همراه این پیام به مدل تنظیم‌شده ارسال می‌شود", "Note sent to the configured model with this message")} · ${safe(selectedMemory.text)}</bdi>${button("memory-unselect", t("برداشتن یادداشت", "Remove selected note"))}</div>` : ""}
  <div id="attachments">${files.map((f, i) => `<span class="chip"><bdi>${safe(f.name)}</bdi>${button("remove-" + i, icon("close"), "remove")}</span>`).join("")}</div>
  <div class="tools">${button("attach", icon("attach"), "iconbtn")}<input type="file" multiple id="file" hidden>${button("save-draft", icon("layers") + t("ذخیرهٔ پیش‌نویس", "Save draft"), "textbtn")}
  ${button("voice", icon("wave") + label("voice"), "voicebtn")}<button type="submit" class="primary send" ${connected && !sending ? "" : "disabled"} aria-label="${t("ارسال", "Send")}">${icon("send")}</button></div></form>
@@ -265,7 +270,15 @@ function syncVoice() {
   }
 }
 const privateProjects = () => Boolean(session && !review && page === "workspace" && tab === "projects");
-const personalMemory = () => Boolean(session && !review && page === "workspace" && tab === "memory" && !activeProject);
+const workspaceMemory = () => Boolean(session && !review && page === "workspace" && tab === "memory");
+const memoryScope = () => projectIds.get(activeProject) ?? null;
+const memoryPath = (projectId, exportNotes = false) => {
+  const params = new URLSearchParams();
+  if (projectId !== null) params.set("project", projectId);
+  if (exportNotes) params.set("export", "1");
+  return "memory" + (params.size ? "?" + params : "");
+};
+const visibleNotes = () => loadedMemoryScope === memoryScope() ? memoryNotes : [];
 const personalDocuments = () => Boolean(session && !review && page === "workspace" && tab === "files" && !activeProject);
 function downloadArtifact(content, type, filename) {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -277,7 +290,7 @@ function downloadArtifact(content, type, filename) {
 }
 function workspaceItems() {
   if (tab === "projects") return projects.map((name) => ({ name }));
-  if (personalMemory()) return (personalNotes ?? []).map((note) => ({ ...note, name: note.text }));
+  if (workspaceMemory()) return visibleNotes().map((note) => ({ ...note, name: note.text }));
   if (personalDocuments()) return privateDocuments ?? [];
   const items =
     {
@@ -298,9 +311,10 @@ function listItems() {
   return rows
     .map(
       ({ item, i }) =>
-        `<div class="work-row">${item.url ? `<img src="${item.url}" alt="">` : icon(glyph[tab])}<bdi>${safe(item.name)}</bdi>${personalMemory()
+        `<div class="work-row">${item.url ? `<img src="${item.url}" alt="">` : icon(glyph[tab])}<bdi>${safe(item.name)}</bdi>${workspaceMemory()
           ? button("memory-edit-" + item.id, t("ویرایش", "Edit"), "outline") +
-            button("memory-delete-" + item.id, t("حذف", "Delete"), "outline")
+            button("memory-delete-" + item.id, t("حذف", "Delete"), "outline") +
+            (session?.chatAvailable ? button("memory-share-" + item.id, t("انتخاب برای پیام بعدی", "Select for next message"), "outline") : "")
           : personalDocuments()
             ? button("document-view-" + item.id, t("پیش‌نمایش", "Preview"), "outline") +
               `<a class="outline" href="/api/documents?id=${encodeURIComponent(item.id)}">${t("دریافت", "Download")}</a>` +
@@ -346,11 +360,11 @@ function projectTasks() {
 }
 function space() {
   const add = tab === "projects" || tab === "memory";
-  const editing = personalMemory() && personalNotes?.find((note) => note.id === editingNote);
+  const editing = workspaceMemory() && visibleNotes().find((note) => note.id === editingNote);
   return (
     title("workspace") +
     `<section class="surface stack"><div class="seg">${["history", "projects", "memory", "files", "gallery"].map((k) => button("tab-" + k, label(k), tab === k ? "on" : "")).join("")}</div>
- <h2>${label(tab)}</h2><p class="sub">${privateProjects() ? t("پروژه‌های خصوصی در حساب شما ذخیره می‌شوند.", "Private projects stay in your account.") : personalMemory()
+ <h2>${label(tab)}</h2><p class="sub">${privateProjects() ? t("پروژه‌های خصوصی در حساب شما ذخیره می‌شوند.", "Private projects stay in your account.") : workspaceMemory()
    ? t("تنها یادداشت‌هایی که خودتان ذخیره می‌کنید در حساب شما می‌مانند.", "Only notes you save explicitly stay in your account.")
    : personalDocuments()
      ? t("فایل متنی خصوصی تا ۱ مگابایت. فایل به مدل ارسال نمی‌شود.", "Private text file, up to 1 MiB. Files are not sent to the model.")
@@ -359,8 +373,8 @@ function space() {
  <select id="project-filter" aria-label="${t("پروژهٔ انتخابی", "Active project")}"><option value="">${t("همهٔ پروژه‌ها", "All projects")}</option>${projects.map((n) => `<option ${n === activeProject ? "selected" : ""}>${safe(n)}</option>`).join("")}</select></div>
  ${add ? `<div class="controls"><label class="field"><input id="item-name" dir="auto" maxlength="${privateProjects() ? 120 : 500}" value="${safe(editing?.text ?? "")}" placeholder="${tab === "projects" ? t("نام پروژه", "Project name") : t("یادداشت حافظه", "Memory note")}" aria-label="${label(tab)}"></label>${button("add-item", icon("layers") + (editing ? t("ذخیره", "Save") : t("افزودن", "Add")))}
  ${editing ? button("memory-cancel", t("انصراف", "Cancel"), "outline") : ""}
- ${personalMemory() ? `<a href="/api/memory?export=1" class="outline">${t("خروجی حافظه", "Export memory")}</a>
-   ${personalNotes?.length ? button("memory-csv", t("دریافت جدول CSV", "Download CSV"), "outline") : ""}` : ""}</div>` : ""}
+ ${workspaceMemory() ? `<a href="/api/${safe(memoryPath(memoryScope(), true))}" class="outline">${t("خروجی حافظه", "Export memory")}</a>
+   ${visibleNotes().length ? button("memory-csv", t("دریافت جدول CSV", "Download CSV"), "outline") : ""}` : ""}</div>` : ""}
  ${personalDocuments() ? `<input type="file" id="private-document" accept=".txt,.md,.csv" hidden>
    ${button("document-upload", icon("attach") + t("ذخیرهٔ فایل خصوصی", "Save private file"))}
    ${documentPreview ? `<label class="field"><bdi>${safe(documentPreview.name)}</bdi>
@@ -515,6 +529,7 @@ function errorText(code) {
     project_invalid: t("نام معتبر پروژه را وارد کنید.", "Enter a valid project name."),
     project_cap: t("حداکثر ۵۰ پروژه مجاز است.", "You can save up to 50 projects."),
     file_cap: t("به سقف ذخیره‌سازی فایل رسیده‌اید.", "Your file storage limit has been reached."),
+    note_unavailable: t("یادداشت تغییر کرده یا در دسترس نیست. دوباره آن را انتخاب کنید.", "The note changed or is unavailable. Select it again."),
     note_missing: t("این یادداشت در حساب شما پیدا نشد.", "This note was not found in your account."),
     note_cap: t("به سقف ۱۰۰ یادداشت رسیده‌اید.", "Your account has reached its 100-note limit."),
     speech_local: t("بازشناسی فارسی روی دستگاه در دسترس نیست. از گفت‌وگوی متنی استفاده کنید.", "Local Persian recognition is unavailable. Use Text chat."),
@@ -658,9 +673,11 @@ app.addEventListener("submit", async (event) => {
       "JARVIS is preparing a reply…",
     );
     try {
-      const { turn } = await api("chat", { message });
+      const memory = selectedMemory;
+      const { turn } = await api("chat", memory ? { message, memory: memory.ref } : { message });
       if (session !== requester) return;
       mergeTurns([turn]);
+      if (selectedMemory === memory) selectedMemory = null;
       if (draft.trim() === message) draft = "";
     } catch (err) {
       if (session !== requester) return;
@@ -668,6 +685,7 @@ app.addEventListener("submit", async (event) => {
         returnToGate();
         return;
       }
+      if (err.message === "note_unavailable") selectedMemory = null;
       chatFeedback = errorText(err.message);
     }
     if (session !== requester) return;
@@ -791,33 +809,38 @@ async function updateTasks(action, fields) {
     }
   }
 }
-async function loadPersonalMemory() {
+async function loadWorkspaceMemory() {
   const requester = session;
+  const projectId = memoryScope();
   try {
-    const result = await api("memory");
-    if (session !== requester || !personalMemory() || personalNotes !== null) return;
-    personalNotes = result.notes;
+    const result = await api(memoryPath(projectId));
+    if (session !== requester || !workspaceMemory() || memoryScope() !== projectId ||
+        loadedMemoryScope === projectId) return;
+    memoryNotes = result.notes;
+    loadedMemoryScope = projectId;
   } catch (error) {
-    if (session !== requester || !personalMemory()) return;
+    if (session !== requester || !workspaceMemory() || memoryScope() !== projectId) return;
     if (error.message === "auth") returnToGate();
     else feedback = errorText(error.message);
   }
-  if (session === requester && personalMemory()) render();
+  if (session === requester && workspaceMemory()) render();
 }
-async function changePersonalMemory(body, control) {
+async function changeWorkspaceMemory(body, control) {
   const requester = session;
+  const projectId = memoryScope();
   control.disabled = true;
   try {
-    const result = await api("memory", body);
-    if (session !== requester) return;
-    personalNotes = result.notes;
+    const result = await api("memory", { ...body, projectId });
+    if (session !== requester || memoryScope() !== projectId) return;
+    memoryNotes = result.notes;
+    loadedMemoryScope = projectId;
     editingNote = null;
   } catch (error) {
-    if (session !== requester) return;
+    if (session !== requester || memoryScope() !== projectId) return;
     if (error.message === "auth") returnToGate();
     else {
       feedback = errorText(error.message);
-      if (personalMemory()) {
+      if (workspaceMemory()) {
         render();
         const field = app.querySelector("#item-name");
         if (body.text && field) field.value = body.text;
@@ -825,7 +848,7 @@ async function changePersonalMemory(body, control) {
       return;
     }
   }
-  if (session === requester && personalMemory()) render();
+  if (session === requester && workspaceMemory()) render();
 }
 async function updateDocuments(body) {
   const requester = session;
@@ -909,25 +932,35 @@ app.addEventListener("click", async (event) => {
     if (item) downloadArtifact(draftDocument(item.name, lang), "text/html;charset=utf-8", "jarvis-draft.html");
     return;
   }
-  if (action === "memory-csv" && personalMemory() && personalNotes?.length) {
-    downloadArtifact(notesCsv(personalNotes, lang), "text/csv;charset=utf-8", "jarvis-notes.csv");
+  if (action === "memory-csv" && workspaceMemory() && visibleNotes().length) {
+    downloadArtifact(notesCsv(visibleNotes(), lang), "text/csv;charset=utf-8", "jarvis-notes.csv");
     return;
   }
-  if (personalMemory() && action.startsWith("memory-")) {
+  if (action === "memory-unselect") {
+    selectedMemory = null;
+    render();
+    return;
+  }
+  if (workspaceMemory() && action.startsWith("memory-")) {
     if (action === "memory-cancel") {
       editingNote = null;
       render();
       return;
     }
-    const noteAction = /^memory-(edit|delete)-([a-f0-9-]{36})$/.exec(action);
-    const note = personalNotes?.find((item) => item.id === noteAction?.[2]);
+    const noteAction = /^memory-(edit|delete|share)-([a-f0-9-]{36})$/.exec(action);
+    const note = visibleNotes().find((item) => item.id === noteAction?.[2]);
     if (!note) return;
-    if (noteAction[1] === "edit") {
+    if (noteAction[1] === "share" && session.chatAvailable) {
+      selectedMemory = { text: note.text, ref: { id: note.id, updated: note.updated, projectId: memoryScope() } };
+      page = "main";
+      render();
+      app.querySelector("#draft")?.focus();
+    } else if (noteAction[1] === "edit") {
       editingNote = note.id;
       render();
       app.querySelector("#item-name").focus();
-    } else if (confirm(t("این یادداشت حذف شود؟", "Delete this note?"))) {
-      await changePersonalMemory({ operation: "delete", id: note.id }, control);
+    } else if (noteAction[1] === "delete" && confirm(t("این یادداشت حذف شود؟", "Delete this note?"))) {
+      await changeWorkspaceMemory({ operation: "delete", id: note.id }, control);
     }
     return;
   }
@@ -1016,8 +1049,8 @@ app.addEventListener("click", async (event) => {
   if (action === "add-item") {
     const name = app.querySelector("#item-name").value.trim();
     if (!name) return;
-    if (personalMemory()) {
-      await changePersonalMemory({ operation: editingNote ? "edit" : "add", id: editingNote, text: name }, control);
+    if (workspaceMemory()) {
+      await changeWorkspaceMemory({ operation: editingNote ? "edit" : "add", id: editingNote, text: name }, control);
       return;
     }
     if (privateProjects()) {
@@ -1166,7 +1199,7 @@ app.addEventListener("click", async (event) => {
   render();
   if (action === "monitor" && session && !review) void updateConnector();
   if (privateProjects() && (!projectsLoaded || ["workspace", "tab-projects"].includes(action))) void updateProjects();
-  if (personalMemory() && personalNotes === null) void loadPersonalMemory();
+  if (workspaceMemory() && loadedMemoryScope !== memoryScope()) void loadWorkspaceMemory();
   if (personalDocuments() && privateDocuments === null) void updateDocuments();
 });
 app.addEventListener("input", (event) => {
@@ -1208,7 +1241,7 @@ app.addEventListener("change", async (event) => {
     editingNote = null;
     documentPreview = null;
     render();
-    if (personalMemory() && personalNotes === null) void loadPersonalMemory();
+    if (workspaceMemory() && loadedMemoryScope !== memoryScope()) void loadWorkspaceMemory();
     if (personalDocuments() && privateDocuments === null) void updateDocuments();
     return;
   }

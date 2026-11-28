@@ -2,7 +2,7 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Phase I · Private task reminders
+**Active milestone** Product integration · History and scoped Creator memory
 
 **Latest verified remote checkpoint before Phase I** `72b5020e4923de9ef4ccfa96b711147d4a474703`
 
@@ -25,7 +25,8 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | C | Streaming speech, hands-free conversation, device selection and voice activity detection | MISSING | The current implementation handles one explicit turn. |
 | D | Persistent Creator session context | PARTIALLY IMPLEMENTED | OpenClaw keeps its stable Creator session. The product stores completed text and voice turns per Creator and restores them after reload or sign-in. HTTP and Chromium fixtures passed. |
 | D | Explicit personal notes, text search, edit, delete and export | VERIFIED LOCAL | Saved in the private product SQLite store by authenticated owner. The API fixture checked sign-out and sign-in persistence, persisted bytes on a separate database connection, and cross-account read or mutation denial. |
-| D | Preferences, project memory, retrieval into inference, long-term knowledge and managed backup | MISSING | Existing upstream operator capabilities require a scoped product integration. |
+| D | Project notes and explicit retrieval into Creator text chat | VERIFIED LOCAL | The HTTP Gateway fixture checked personal and project note selection, exact owner/project/revision boundaries and separate sessions for selected-note turns. Live inference remains pending. |
+| D | Preferences, long-term knowledge and managed backup | MISSING | No product integration for these capabilities. |
 | E | Attachment selection and local image thumbnails | PARTIALLY IMPLEMENTED | Local selection and preview exist. The product rejects inference requests with attachments. |
 | E | Private TXT, Markdown and CSV storage, plain-text preview, download and deletion | VERIFIED LOCAL | The signed-in product API fixture checked exact downloaded bytes, UTF-8 and filename validation, size enforcement, CSRF and cross-account denial. |
 | E | Document inference, PDFs, structured spreadsheets, vision, camera, voice and visual search | MISSING | Existing Creator-wide tool authority makes untrusted-file inference a separate restricted-adapter milestone. |
@@ -79,7 +80,7 @@ In the authenticated Creator Voice screen, the microphone control runs one Persi
 
 ## Phase D checkpoint
 
-Signed-in users can save, search, edit, delete and export their own explicit notes from Workspace → Memory with no project selected. Notes stay in the owner-only SHADVERSE SQLite state directory across sign-out. Project notes keep their existing local behavior. The API scopes list, update, delete and export to the authenticated account, including when the caller is the Creator, and requires CSRF on writes. Each account has a 100-note cap. Only the explicit Add action saves a note. The product does not send memory to an inference provider.
+Signed-in users can save, search, edit, delete and export their own explicit notes from Workspace → Memory with no project selected. Notes stay in the owner-only SHADVERSE SQLite state directory across sign-out. At this checkpoint, project notes kept their earlier local behavior. The API scopes list, update, delete and export to the authenticated account, including when the caller is the Creator, and requires CSRF on writes. Each account has a 100-note cap. Only the explicit Add action saves a note. This checkpoint kept notes local. The later memory retrieval checkpoint adds explicit opt-in.
 
 **Next independent milestone.** Add explicit local document upload and download with ownership and quota enforcement before connecting any document to the Gateway.
 
@@ -126,3 +127,8 @@ Acknowledgement is scoped to the owner, project, task, and displayed deadline. I
 ## Conversation history checkpoint
 
 Product history records completed text and voice turns after successful Gateway replies. The authenticated Creator sees their own history, 25 turns at a time. A different Creator sees their own empty history and member access is denied. Failed and canceled fixture turns were excluded. Existing Gateway-only transcripts are not imported. Browser reload restoration was verified with a local Chromium fixture.
+
+
+## Scoped memory retrieval checkpoint
+
+Workspace → Memory supports personal notes and notes linked to a persisted private project. Selecting a note shows its text in the Creator composer. Sending explicitly shares one exact saved revision with the configured model, through an isolated Gateway session for that turn. Ordinary turns keep the normal stable session. The server enforces account, project and revision and rejects stale, foreign and wrongly scoped references before dispatch. Request context is included in managed route sizing. Product history stores the visible message and reply without adding the note text to its stored request. A reply may contain material from the shared note, and OpenClaw may retain the separate turn under its own storage policy.
