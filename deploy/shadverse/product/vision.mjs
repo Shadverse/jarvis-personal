@@ -82,6 +82,9 @@ export async function openVision(
     !Array.isArray(agents) ||
     agents.length !== 1 ||
     agents[0]?.id !== "vision" ||
+    config.commands?.bash === true ||
+    config.tools?.elevated?.enabled === true ||
+    [config.agents?.defaults?.model, agents[0].model].some((model) => model?.fallbacks?.length) ||
     !Array.isArray(config.tools?.deny) ||
     !config.tools.deny.includes("*")
   )
@@ -92,7 +95,7 @@ export async function openVision(
   if (typeof modelPolicyFile !== "string" || !isAbsolute(modelPolicyFile))
     throw Error("Use a private vision model policy.");
   const models = await loadModelPolicy(modelPolicyFile);
-  const routes = models.routes.filter((route) => route.eligible && route.input.includes("image"));
+  const routes = models.routes.filter((route) => route.eligible && route.capabilities.vision);
   if (!routes.length) throw Error("No independently approved vision model route.");
   const registry = createModelRegistry(db, {
     ...models,
@@ -166,7 +169,9 @@ export async function openVision(
                   type: "message",
                   role: "user",
                   content: [
-                    { type: "input_text", text: message },
+                    // Keep the question in one quoted field so direct chat commands
+                    // cannot run before the agent tool policy is applied.
+                    { type: "input_text", text: "User question: " + JSON.stringify(message) },
                     ...(image
                       ? [
                           {

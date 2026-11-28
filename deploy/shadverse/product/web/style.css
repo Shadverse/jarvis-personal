@@ -1726,3 +1726,16 @@ h3 {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+.vision-media {
+  display: block;
+  max-width: 100%;
+  max-height: 52vh;
+  margin-inline: auto;
+  object-fit: contain;
+}
+
+[data-vision-state] textarea {
+  min-width: 0;
+  width: 100%;
+}

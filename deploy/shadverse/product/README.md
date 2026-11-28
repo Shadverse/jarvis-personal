@@ -36,7 +36,8 @@ Use `node manage.mjs invite` privately to issue a one-use member code valid for 
 | -------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | Gate           | Username and password, one-time registration-code activation, server-side session and logout       | Public HTTPS proxy cutover and live account sign-in proof                |
 | Assistant      | Creator text chat through private OpenClaw, prompt starters, local drafts and attachment selection | Uploaded attachments, import of older Gateway transcripts, member chat |
-| Voice          | Browser microphone analysis and analysed prerecorded audio                                         | Speech recognition and live replies             |
+| Voice          | Browser microphone analysis, local Persian speech and an opt-in foreground conversation loop       | Authorized live Persian device and Gateway acceptance |
+| JARVIS Vision  | Explicit camera and screen capture, screenshot upload and selected-frame preview                    | Verified isolated zero-cost vision provider and real device acceptance |
 | Workspace      | Session projects, notes, draft history, local file inventory, thumbnails and search                | Tenant-authorized storage and retrieval                                  |
 | Subscription   | Free, Pro and Ultra views with monthly and annual terms                                            | Entitlements, metering and purchases                                     |
 | Monitoring     | Live browser frame trace, statistics, pause and keyboard inspection                                | Server and billing telemetry                                             |
@@ -106,3 +107,5 @@ OPENCLAW_VITEST_RUNTIME=node node scripts/run-vitest.mjs \
 ```
 
 SHADVERSE © · OpenClaw MIT attribution and the bundled font licenses are included in web/.
+
+JARVIS Vision holds one selected frame locally. Inference is disabled by default. Follow [Restricted vision staging](VISION_STAGING.md) before enabling it.

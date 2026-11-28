@@ -38,3 +38,6 @@ Persian character input selects Persian-compatible routes. Leading task verbs se
 The ledger contains route IDs, model keys, timestamps, state, latency and token counts. It excludes prompts, replies and secrets. The daily UTC limit reserves the discovered context window plus the requested output cap before dispatch. Measured usage settles the reservation. An unmeasured or ambiguous attempt holds its reservation for that day. A measured overrun pauses the route. OpenResponses describes its output cap as provider-dependent. Review the Gateway’s actual execution and retries before claiming a provider-enforced token cap. The ledger reports product-side admission and measured usage, not provider invoices.
 
 For live acceptance, use the [queue](../../../LIVE_ACCEPTANCE_QUEUE.md).
+
+
+Managed route metadata distinguishes text, image and multimodal input. The model inventory alone cannot verify standalone recognition or speech synthesis. Those capabilities stay unverified in the provider registry. The current product only uses its existing local Persian browser engines for speech. Vision dispatch uses a separately approved catalog and credential, as described in [Restricted vision staging](VISION_STAGING.md).

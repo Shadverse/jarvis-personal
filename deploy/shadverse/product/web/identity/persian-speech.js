@@ -29,7 +29,11 @@ export async function recognizePersian(signal) {
         .map((result) => result[0].transcript)
         .join(" ")
         .trim();
-      if (text) finish(null, text);
+      if (text) {
+        finish(null, text);
+        // End capture before starting a reply or local playback.
+        speech.abort();
+      }
     };
     speech.onerror = ({ error }) =>
       finish(

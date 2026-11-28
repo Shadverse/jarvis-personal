@@ -103,6 +103,14 @@ export async function loadModelPolicy(path = process.env.JARVIS_MODEL_POLICY_FIL
         maxOutputTokens,
         tasks: route.tasks,
         input,
+        capabilities: {
+          text: input.includes("text"),
+          vision: input.includes("image"),
+          multimodal: input.length > 1,
+          // OpenClaw's model inventory reports input modalities, not speech services.
+          speechRecognition: "unverified",
+          speechSynthesis: "unverified",
+        },
         contextWindow,
         available,
         verified,
@@ -201,7 +209,7 @@ export function createModelRegistry(db, policy) {
           .filter(
             (route) =>
               route.eligible &&
-              (!image || route.input.includes("image")) &&
+              (!image || route.capabilities.vision) &&
               (routeId === null || route.id === routeId) &&
               !route.paused &&
               !exclude.has(route.model) &&

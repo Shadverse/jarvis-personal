@@ -6,6 +6,7 @@ import { Signal } from "./identity/audio.js";
 import { mountHead } from "./identity/head.js";
 import { localPersianVoice, recognizePersian, speakPersian } from "./identity/persian-speech.js";
 import { mountScope } from "./instruments.js";
+import { createVisionUI } from "./vision.js";
 const app = document.querySelector("#app");
 const standalone =
   location.protocol === "file:" || document.documentElement.hasAttribute("data-standalone");
@@ -110,6 +111,7 @@ const names = () => ({
   login: t("ورود", "Sign in"),
   main: t("دستیار من", "My assistant"),
   voice: t("دستیار صوتی", "Voice assistant"),
+  vision: t("بینایی جارویس", "JARVIS Vision"),
   workspace: t("فضای کار", "Workspace"),
   monitor: t("پایش و ابزارها", "Monitor & tools"),
   plans: t("اشتراک", "Subscription"),
@@ -123,6 +125,7 @@ const names = () => ({
 const glyph = {
   main: "core",
   voice: "wave",
+  vision: "image",
   workspace: "folder",
   monitor: "wave",
   plans: "plan",
@@ -142,6 +145,11 @@ const language = () =>
   `<button class="outline lang" data-action="lang">${icon("globe")}${t("EN", "فارسی")}</button>`;
 const button = (action, body, cls = "outline", disabled = false) =>
   `<button type="button" class="${cls}" data-action="${action}"${disabled ? " disabled" : ""}>${body}</button>`;
+const vision = createVisionUI({
+  root: app, api, render, t, safe, button, onAuth: returnToGate,
+  active: () => page === "vision" && !review && session?.role === "creator",
+  limits: () => session?.vision,
+});
 const notice = () => `<p class="notice" role="status">${safe(feedback)}</p>`;
 const previewLabel = () => t("پیش‌نمایش", "Preview");
 const offline = () =>
@@ -224,6 +232,7 @@ function voice() {
         <p class="voice-note">${session?.chatAvailable
           ? t("بازشناسی و پخش گفتار به پشتیبانی فارسیِ محلی مرورگر نیاز دارند.", "Speech recognition and playback require local Persian support in your browser.")
           : t("گفت‌وگوی صوتی زنده در این نشست در دسترس نیست.", "Live voice conversation is unavailable in this session.")}</p>
+        ${session?.chatAvailable ? button("mic-continuous", t("گفت‌وگوی صوتی پیوسته", "Continuous voice"), "outline") : ""}
         <p class="notice" id="audio-status" role="status">${safe(micState)}</p>
       </div>
     </div>
@@ -446,14 +455,15 @@ function admin() {
 function shell() {
   const creator = session?.role === "creator" || review;
   return `<div class="shell${page === "voice" ? " voice-shell" : ""}">${page === "voice" ? '<canvas class="voice-matrix" aria-hidden="true"></canvas>' : ""}<button class="scrim ${drawer ? "open" : ""}" aria-label="${t("بستن منو", "Close menu")}" data-action="menu"></button><aside class="rail glass ${drawer ? "open" : ""}">${button("menu", icon("close"), "iconbtn drawerclose")}${brand()}
- <nav class="navgroup"><small>${t("محیط شخصی", "Personal space")}</small>${["main", "voice", "workspace", "monitor"].map(nav).join("")}</nav>
+ <nav class="navgroup"><small>${t("محیط شخصی", "Personal space")}</small>${["main", "voice", ...(session?.role === "creator" && !review ? ["vision"] : []), "workspace", "monitor"].map(nav).join("")}</nav>
  <nav class="navgroup"><small>${t("حساب کاربری", "Account")}</small>${nav("plans")}${creator ? nav("admin") : ""}</nav>
  <div class="railbottom"><span class="pill">${icon("user")}${review ? previewLabel() : `<bdi>${safe(session.name)}</bdi>`}</span>${button("logout", icon("logout") + t("خروج", "Sign out"), "navbtn")}</div></aside>
  <main class="main"><header class="top"><div class="topstart">${button("menu", icon("menu"), "iconbtn mobilemenu")}</div><strong class="topname">${productName()}</strong><div class="topactions">${review ? `<span class="pill">${previewLabel()}</span>` : ""}${language()}</div></header>
- <div class="page">${{ main: home, voice, workspace: space, monitor, plans, admin }[page]()}${notice()}</div>
+ <div class="page">${{ main: home, voice, vision: vision.view, workspace: space, monitor, plans, admin }[page]()}${notice()}</div>
  <footer class="footnote"><span class="en">SHADVERSE ©</span>${attribution()}</footer></main></div>`;
 }
 function render() {
+  if (page !== "vision" && app.querySelector("[data-vision-state]")) vision.close();
   const old = app.querySelector(".portrait");
   if (old?.dataset.renderer)
     lastPortrait = { renderer: old.dataset.renderer, points: old.dataset.points };
@@ -475,6 +485,7 @@ function render() {
   const scope = app.querySelector("#scope");
   if (scope) stopScope = mountScope(scope, lang === "fa");
   if (page === "voice") syncVoice();
+  if (page === "vision") vision.sync();
   for (const [action, fa, en] of [
     ["attach", "افزودن پیوست", "Attach files"],
     ["reveal", "نمایش یا پنهان کردن رمز عبور", "Show or hide password"],
@@ -593,7 +604,7 @@ async function loadConversation(before = null, control) {
     }
   }
 }
-async function runPersianTurn() {
+async function runPersianTurn(continuous = false) {
   if (voiceRun) {
     stopAudio();
     demoState = "idle";
@@ -614,30 +625,39 @@ async function runPersianTurn() {
   demoState = "listening";
   micState = t("به فارسی صحبت کنید.", "Speak in Persian.");
   syncVoice();
+  const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(180_000)]);
   try {
-    const message = (await recognizePersian(controller.signal)).slice(0, 4000).trim();
-    controller.signal.throwIfAborted();
-    demoState = "thinking";
-    micState = t("جارویس در حال آماده‌کردن پاسخ است…", "JARVIS is preparing a reply…");
-    syncVoice();
-    const { reply, turn } = await api("chat", { message }, controller.signal);
-    controller.signal.throwIfAborted();
-    if (session !== requester) return;
-    mergeTurns([turn]);
-    const voice = localPersianVoice();
-    if (!voice) {
-      micState = errorText("speech_playback");
-    } else {
+    do {
+      if (continuous) {
+        demoState = "listening";
+        micState = t("به فارسی صحبت کنید.", "Speak in Persian.");
+        syncVoice();
+      }
+      const listening = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
+      const message = (await recognizePersian(listening)).slice(0, 4000).trim();
+      signal.throwIfAborted();
+      demoState = "thinking";
+      micState = t("جارویس در حال آماده‌کردن پاسخ است…", "JARVIS is preparing a reply…");
+      syncVoice();
+      const { reply, turn } = await api("chat", { message }, signal);
+      signal.throwIfAborted();
+      if (session !== requester) return;
+      mergeTurns([turn]);
+      const voice = localPersianVoice();
+      if (!voice) {
+        micState = errorText("speech_playback");
+        break;
+      }
       demoState = "speaking";
       micState = t("پاسخ جارویس", "JARVIS reply");
       syncVoice();
-      await speakPersian(reply, voice, controller.signal);
+      await speakPersian(reply, voice, signal);
       micState = t("پاسخ در گفت‌وگوی متنی هم در دسترس است.", "The reply is also in Text chat.");
-    }
+    } while (continuous && !signal.aborted);
   } catch (error) {
     if (!controller.signal.aborted && session === requester) {
       if (error.message === "auth") returnToGate();
-      else micState = errorText(error.message);
+      else micState = errorText(error.name === "TimeoutError" ? "speech_empty" : error.message);
     }
   } finally {
     if (voiceRun === controller) {
@@ -883,8 +903,16 @@ app.addEventListener("click", async (event) => {
   if (!control) return;
   const action = control.dataset.action;
   feedback = "";
+  if (page === "vision" && action.startsWith("vision-")) {
+    await vision.handle(action.slice(7));
+    return;
+  }
   if (action === "conversation-history") {
     await loadConversation(historyBefore, control);
+    return;
+  }
+  if (action === "mic-continuous" && page === "voice" && session?.chatAvailable) {
+    await runPersianTurn(true);
     return;
   }
   const modelAction = /^model-(pause|resume)-([a-z0-9-]+)$/.exec(action);
@@ -1113,6 +1141,7 @@ app.addEventListener("click", async (event) => {
     page = location.hash === "#voice" ? "voice" : "main";
   } else if (action === "menu") drawer = !drawer;
   else if (action === "logout") {
+    if (page === "vision") vision.close();
     try {
       if (session) await api("logout", {});
     } catch (err) {
@@ -1180,8 +1209,9 @@ app.addEventListener("click", async (event) => {
     drawer = false;
   } else if (action.startsWith("remove-")) files.splice(Number(action.slice(7)), 1);
   else if (["month", "year"].includes(action)) period = action;
-  else if (["main", "voice", "workspace", "monitor", "plans", "admin"].includes(action)) {
+  else if (["main", "voice", "vision", "workspace", "monitor", "plans", "admin"].includes(action)) {
     if (action === "admin" && !review && session?.role !== "creator") return;
+    if (action === "vision" && (review || session?.role !== "creator")) return;
     stopAudio();
     demoState = "idle";
     micState = "";
@@ -1213,6 +1243,7 @@ app.addEventListener("click", async (event) => {
 });
 app.addEventListener("input", (event) => {
   if (event.target.id === "draft") draft = event.target.value;
+  if (event.target.id === "vision-question") vision.input(event.target.value);
   if (event.target.id === "task-title" && taskView) taskView.input = event.target.value;
   if (event.target.id === "reminder-due" && taskView) taskView.reminderInput = event.target.value;
   if (event.target.id === "search") {
@@ -1221,6 +1252,8 @@ app.addEventListener("input", (event) => {
   }
 });
 app.addEventListener("change", async (event) => {
+  if (event.target.id === "vision-file") return vision.choose(event.target.files[0]);
+  if (event.target.id === "vision-facing") return vision.facing(event.target.value);
   if (event.target.id === "private-document" && personalDocuments()) {
     const file = event.target.files[0];
     if (!file) return;
@@ -1315,6 +1348,10 @@ if (!standalone && window.isSecureContext && "serviceWorker" in navigator)
   navigator.serviceWorker.register("./sw.js").catch(() => {});
 
 function suspendAudio() {
+  if (page === "vision") {
+    vision.close();
+    render();
+  }
   stopAudio();
   if (page === "voice") {
     demoState = "idle";

@@ -100,10 +100,12 @@ test(
           if (!this.processLocally || this.lang !== "fa-IR")
             throw Error("Remote recognition attempted");
           window.speechFixture.starts++;
+          const transcript = window.speechFixture.next
+            ? window.speechFixture.next.shift()
+            : window.speechFixture.transcript;
+          if (!transcript) return;
           this.onresult({
-            results: [
-              Object.assign([{ transcript: window.speechFixture.transcript }], { isFinal: true }),
-            ],
+            results: [Object.assign([{ transcript: transcript }], { isFinal: true })],
           });
         }
         abort() {}
@@ -177,5 +179,17 @@ test(
     await page.locator(".turn.assistant").getByText("درود از جارویس").waitFor();
     assert.equal(await page.locator(".turn.human").count(), 1);
     assert.equal(await page.locator(".turn.human p").textContent(), "سلام");
+    await page.locator('nav [data-action="voice"]').click();
+    await page.evaluate(() => {
+      window.speechFixture.next = ["نوبت اول", "نوبت دوم"];
+    });
+    await page.locator('[data-action="mic-continuous"]').click();
+    await page.waitForFunction(() => window.speechFixture.starts === 3);
+    assert.deepEqual(
+      requests.slice(2).map(({ input }) => input),
+      ["نوبت اول", "نوبت دوم"],
+    );
+    await page.locator('[data-action="mic-continuous"]').click();
+    await page.locator('.voice-stage[data-state="idle"]').waitFor();
   },
 );

@@ -4,10 +4,12 @@
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
 **Active milestone** P0 · Restricted multimodal intelligence
 
-**Latest verified remote checkpoint before the mobile integration fix** `b9cb2abd27cdca186a67d4799fab4462c1910a8f`
+**Latest verified remote checkpoint before the camera and voice integration** `ba57249320894db37e6a30505e28b4dababefdc5`
 
 **Phase A live acceptance** PENDING. The Phase A checkpoint is on the remote branch.
 **Graphics** Frozen. The current interface and isolated hologram preview are retained.
+
+[Master development directive](MASTER_DEVELOPMENT_DIRECTIVE.md) · [P0 directive](P0_MULTIMODAL_DIRECTIVE.md) · [Upstream capability map](UPSTREAM_CAPABILITY_MAP.md)
 
 Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does not establish a working SHADVERSE integration.
 
@@ -22,12 +24,13 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | C | Browser microphone permission, microphone analysis, audio lifecycle, text fallback | VERIFIED LOCAL | Prior local browser checks inspected input levels and microphone track release. |
 | C | Prerecorded playback and demonstration voice states | MOCKED | A real prerecorded asset and illustrative state controls simulate interaction. |
 | C | Single Persian voice turn, speech-to-chat, local synthesis and cancellation | IMPLEMENTED — LIVE ACCEPTANCE PENDING | Browser and Gateway fixtures exercised the signed-in path, local-only requirements, disconnect propagation and text fallback. Actual Persian audio, live inference and native playback require an authorized staging device. |
-| C | Streaming speech, hands-free conversation, device selection and voice activity detection | MISSING | The current implementation handles one explicit turn. |
+| C | Controlled continuous Persian voice | LOCAL FIXTURE; LIVE PENDING | Opt-in foreground loop starts listening again after local playback ends; recognition stops at the final result. Per-listen silence timeout and session timeout bound microphone use. Independent VAD and background listening are not implemented. |
 | D | Persistent Creator session context | PARTIALLY IMPLEMENTED | OpenClaw keeps its stable Creator session. The product stores completed text and voice turns per Creator and restores them after reload or sign-in. HTTP and Chromium fixtures passed. |
 | D | Explicit personal notes, text search, edit, delete and export | VERIFIED LOCAL | Saved in the private product SQLite store by authenticated owner. The API fixture checked sign-out and sign-in persistence, persisted bytes on a separate database connection, and cross-account read or mutation denial. |
 | D | Project notes and explicit retrieval into Creator text chat | VERIFIED LOCAL | The HTTP Gateway fixture checked personal and project note selection, exact owner/project/revision boundaries and separate sessions for selected-note turns. Live inference remains pending. |
 | D | Preferences, long-term knowledge and managed backup | MISSING | No product integration for these capabilities. |
-| E | Attachment selection and local image thumbnails | PARTIALLY IMPLEMENTED | Local selection and preview exist. The product rejects inference requests with attachments. |
+| E | Browser camera, selected-frame screen capture and screenshot upload | VERIFIED LOCAL | Authenticated browser fixture tested permission denial, facing switch, preview, capture, screen shutdown, upload fallback, route navigation and mobile RTL. Real device acceptance is pending. |
+| E | Selected visual context and Persian voice questions | LOCAL FIXTURE; LIVE PENDING | Shared vision endpoint accepts an explicit frame or bounded follow-up. Continuous voice alternates local recognition and synthesis; it never uploads a live feed. |
 | E | Private TXT, Markdown and CSV storage, plain-text preview, download and deletion | VERIFIED LOCAL | The signed-in product API fixture checked exact downloaded bytes, UTF-8 and filename validation, size enforcement, CSRF and cross-account denial. |
 | E | Restricted OpenResponses vision adapter | LOCAL FIXTURE; LIVE DISABLED BY DEFAULT | Separate port and credential, reviewed config pin, deny-all policy admission, PNG normalization, authorized model selection, usage and session isolation. |
 | E | Document inference, PDFs, structured spreadsheets and visual search | MISSING | Separate authorization and adapter are pending. |
@@ -138,3 +141,12 @@ Workspace → Memory supports personal notes and notes linked to a persisted pri
 ## Workspace integration and narrow-mobile checkpoint
 
 The authenticated Chromium flow connects project creation, task creation, reminder scheduling and acknowledgement, scoped memory selection, a fixture-backed Creator response, reload restoration, file upload and literal preview. It then signs in as a second user and checks project and file separation. The composer retains all four controls in one row at the tested narrow widths. Workspace rows wrap without losing hit targets and file preview stays within its column. No renderer, brand styles or media changed. All Gateway and speech fixture results are local evidence.
+
+
+## P0 multimodal checkpoint
+
+JARVIS Vision uses browser camera and screen permission requests and the local file picker. It previews one normalized frame, supports rotation and retake, and sends only on explicit authorization. Screen capture stops after the selected screenshot. Creator text questions and foreground Persian voice share the restricted OpenResponses route. Ordinary text and voice retain the existing conversation history path.
+
+Local validation passed 15 product tests, including synthetic media and speech in Chromium, real authenticated product endpoints, and a loopback OpenResponses fixture. An additional offline check exercised the pinned OpenClaw deny-all matcher against shell, browser, messaging, node, scheduling and extension tool names. The checks do not establish the effective tool policy of a deployed Gateway or actual provider vision quality.
+
+**Continuation.** With authorized private staging, complete the [P0 vision staging procedure](deploy/shadverse/product/VISION_STAGING.md). Verify the separate runtime's effective tool policy, the exact zero-cost model, and one Persian turn plus follow-up with a synthetic camera frame or screenshot. Check physical camera and microphone release on supported devices. Until then, leave admission unset.

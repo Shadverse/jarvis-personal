@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -198,6 +200,7 @@ test("restricted vision admission, image forwarding and usage through the authen
   assert.equal(requests[0].headers.authorization, "Bearer " + visionToken);
   assert.equal(requests[0].headers["x-openclaw-model"], "local/image");
   assert.equal(requests[0].body.model, "openclaw/vision");
+  assert.equal(requests[0].body.input[0].content[0].text, 'User question: "این چیست؟"');
   assert.deepEqual(requests[0].body.input[0].content[1].source, {
     type: "base64",
     media_type: "image/png",
@@ -210,13 +213,155 @@ test("restricted vision admission, image forwarding and usage through the authen
   assert.equal(requests[1].body.input[0].content.length, 1);
   assert.equal((await post("vision", { clear: true }, account)).status, 200);
   assert.equal((await ask({ context }, account)).status, 409);
+  const chrome = process.env.CHROMIUM || "/usr/bin/chromium";
+  let browserTurns = 0;
+  if (existsSync(chrome)) {
+    const { chromium } = createRequire(import.meta.url)("playwright");
+    const browser = await chromium.launch({
+      executablePath: chrome,
+      args: ["--enable-unsafe-swiftshader"],
+    });
+    try {
+      const page = await browser.newPage({
+        viewport: { width: 360, height: 740 },
+        isMobile: true,
+        reducedMotion: "reduce",
+      });
+      page.setDefaultTimeout(5000);
+      await page.addInitScript(() => {
+        window.fixture = { streams: [], facing: [], spoken: [], deny: false, recognitions: 0 };
+        function stream() {
+          const canvas = document.createElement("canvas");
+          canvas.width = 32;
+          canvas.height = 24;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#0488ff";
+          ctx.fillRect(0, 0, 32, 24);
+          const capture = canvas.captureStream(15);
+          window.fixture.streams.push({ canvas, capture });
+          return capture;
+        }
+        navigator.mediaDevices.getUserMedia = async ({ video }) => {
+          if (window.fixture.deny) throw new DOMException("Denied", "NotAllowedError");
+          window.fixture.facing.push(video.facingMode.ideal);
+          return stream();
+        };
+        navigator.mediaDevices.getDisplayMedia = async () => stream();
+        window.SpeechRecognition = class {
+          processLocally = false;
+          static async available({ langs, processLocally }) {
+            if (langs[0] !== "fa-IR" || !processLocally) throw Error("Remote speech");
+            return "available";
+          }
+          start() {
+            window.fixture.recognitions++;
+            if (window.fixture.recognitions > 2) return;
+            const result = Object.assign([{ transcript: "این تصویر چیست؟" }], { isFinal: true });
+            queueMicrotask(() => this.onresult?.({ results: [result] }));
+          }
+          abort() {}
+        };
+        window.SpeechSynthesisUtterance = class {
+          constructor(text) {
+            this.text = text;
+          }
+        };
+        Object.defineProperty(window, "speechSynthesis", {
+          value: {
+            getVoices: () => [{ lang: "fa-IR", localService: true }],
+            speak(utterance) {
+              window.fixture.spoken.push(utterance.text);
+              queueMicrotask(() => utterance.onend?.());
+            },
+            cancel() {},
+          },
+        });
+      });
+      await page.goto(origin);
+      await page.locator("#auth [name=name]").fill("creator");
+      await page.locator("#auth [name=password]").fill(password);
+      await page.locator("#auth [type=submit]").click();
+      await page.locator("#draft").waitFor();
+      await page.locator(".mobilemenu").click();
+      await page.locator('nav [data-action="vision"]').click();
+      assert.equal(await page.locator("html").getAttribute("dir"), "rtl");
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth === innerWidth));
+      const action = (key) => page.locator(`[data-action="vision-${key}"]`);
+      const videoReady = () =>
+        page.waitForFunction(() => document.querySelector("#vision-video")?.videoWidth > 0);
+      const tracks = () =>
+        page.evaluate(() =>
+          window.fixture.streams.map(({ capture }) => capture.getVideoTracks()[0].readyState),
+        );
+      await page.evaluate(() => {
+        window.fixture.deny = true;
+      });
+      await action("camera").click();
+      await page.getByText(/دسترسی داده نشد/).waitFor();
+      await page.evaluate(() => {
+        window.fixture.deny = false;
+      });
+      await action("camera").click();
+      await videoReady();
+      await page.locator("#vision-facing").selectOption("user");
+      await videoReady();
+      assert.deepEqual(await page.evaluate(() => window.fixture.facing), ["environment", "user"]);
+      assert.deepEqual(await tracks(), ["ended", "live"]);
+      await action("frame").click();
+      await page.locator("img.vision-media").waitFor();
+      assert.equal(requests.length, 2);
+      await action("camera-off").click();
+      assert.deepEqual(await tracks(), ["ended", "ended"]);
+      await action("continuous").click();
+      await page.waitForFunction(
+        () =>
+          window.fixture.spoken.length === 2 ||
+          document.querySelector('[data-vision-state="error"]'),
+      );
+      assert.equal(
+        await page.evaluate(() => window.fixture.spoken.length),
+        2,
+        await page.locator("[data-vision-state] [role=status]").textContent(),
+      );
+      assert.deepEqual(await page.evaluate(() => window.fixture.spoken), [
+        "پاسخ آزمایشی",
+        "پاسخ آزمایشی",
+      ]);
+      await action("stop").click();
+      await page.locator('[data-vision-state="interrupted"]').waitFor();
+      browserTurns = 2;
+      assert.equal(requests[2].body.input[0].content[1].type, "input_image");
+      assert.equal(requests[3].body.input[0].content.length, 1);
+      await action("screen").click();
+      await videoReady();
+      await action("frame").click();
+      await page.locator("img.vision-media").waitFor();
+      assert.deepEqual(await tracks(), ["ended", "ended", "ended"]);
+      await page.locator("#vision-file").setInputFiles({
+        name: "synthetic.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(png(7), "base64"),
+      });
+      await page.waitForFunction(
+        () => document.querySelector("img.vision-media")?.naturalWidth === 1,
+      );
+      await action("camera").click();
+      await videoReady();
+      await page.locator(".mobilemenu").click();
+      await page.locator('nav [data-action="main"]').click();
+      assert.deepEqual(await tracks(), ["ended", "ended", "ended", "ended"]);
+      assert.equal(requests.length, 4);
+    } finally {
+      await browser.close();
+    }
+  }
   slow = true;
   const control = new AbortController();
   const pending = ask({ image: png(1) }, account, control.signal);
   const rejected = assert.rejects(pending, { name: "AbortError" });
-  for (let tries = 0; tries < 100 && requests.length !== 3; tries++)
+  for (let tries = 0; tries < 100 && requests.length !== 3 + browserTurns; tries++)
     await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.equal(requests.length, 3);
+  assert.equal(requests.length, 3 + browserTurns);
   control.abort();
   await rejected;
   for (let tries = 0; tries < 100 && !canceled; tries++)
@@ -225,11 +370,17 @@ test("restricted vision admission, image forwarding and usage through the authen
   const usage = db.prepare("SELECT total,status FROM model_attempts ORDER BY rowid").all();
   assert.deepEqual(
     usage.map(({ total, status }) => [total, status]),
-    [
-      [7, "completed"],
-      [7, "completed"],
-      [null, "uncertain"],
-    ],
+    [...Array.from({ length: 2 + browserTurns }, () => [7, "completed"]), [null, "uncertain"]],
   );
-  assert.equal(requests.length, 3);
+  // Model a healthy route with an unmeasured completed receipt. That reserve
+  // must still count even once the failure cooldown no longer applies.
+  db.prepare("UPDATE model_attempts SET status='completed' WHERE status='uncertain'").run();
+  const capped = await ask({ image: png(1) }, account);
+  assert.equal(capped.status, 429);
+  assert.equal((await capped.json()).error, "token_budget");
+  await writeFile(admission.configFile, config + "\n");
+  const changed = await ask({ image: png(1) }, account);
+  assert.equal(changed.status, 503);
+  assert.equal((await changed.json()).error, "vision_unavailable");
+  assert.equal(requests.length, 3 + browserTurns);
 });
