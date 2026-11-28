@@ -200,4 +200,8 @@ Monitor & tools projects status from the dedicated OpenClaw inventory profile on
 
 The private Creator realm supports a versioned schema and authenticated import/export with revision conflict checks. It starts empty. Project relationships map organizational records to owned Workspace projects. Ranked Composer previews can opt into scoped records and reject stale revisions. Fixed identity instructions mark the authenticated Creator as the authorized primary user without inventing personal facts. Synthetic HTTP integration covered account isolation, project mapping, secret rejection, export, preview-only behavior and exact dispatch.
 
-**Continuation.** Stream text through the existing OpenResponses SSE path and add safe cancellation and latency measurement. Provider and physical speech acceptance remain deferred.
+## Streaming text checkpoint
+
+The Creator composer now displays authenticated OpenResponses SSE deltas as they arrive and persists the validated final turn only. Local HTTP and browser fixtures verified first text preceding completion, disconnect propagation, credential fragments crossing events, and no retention of canceled or failed turns. Time to first useful text and completion are measured. [RC latency targets](deploy/shadverse/product/CONVERSATION_LATENCY.md) describe first audio, speech completion and interruption measurements. Physical Persian and provider acceptance remain deferred.
+
+**Continuation.** Add audited FREE FIRST, BALANCED, QUALITY and manual selection to the existing zero-spend Creator model router. Customer credential and tenant-runtime activation remain disabled.

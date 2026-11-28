@@ -31,6 +31,7 @@ test(
     }
     const requests = [];
     let failUpstream = false;
+    let upstreamCanceled = false;
     let denyAnonymous = true;
     const gateway = createServer(async (req, res) => {
       const chunks = [];
@@ -55,6 +56,37 @@ test(
       } else if (failUpstream) {
         res.statusCode = 401;
         res.end(JSON.stringify({ error: token }));
+      } else if (requests.at(-1).body.stream) {
+        const input = requests.at(-1).body.input;
+        res.setHeader("Content-Type", "text/event-stream");
+        const event = (type, data) =>
+          res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+        event("response.output_text.delta", { delta: "متن " });
+        if (input === "لغو جریان") {
+          res.on("close", () => {
+            upstreamCanceled = true;
+          });
+        } else if (input === "آزمون بخش‌بندی") {
+          event("response.output_text.delta", { delta: token.slice(0, 31) });
+          event("response.output_text.delta", { delta: token.slice(31) });
+          res.end();
+        } else {
+          event("response.output_text.delta", { delta: "پیوسته" });
+          event("response.completed", {
+            response: {
+              status: "completed",
+              usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+              output: [
+                {
+                  type: "message",
+                  role: "assistant",
+                  content: [{ type: "output_text", text: "متن پیوسته" }],
+                },
+              ],
+            },
+          });
+          res.end("data: [DONE]\n\n");
+        }
       } else {
         res.end(
           JSON.stringify({
@@ -547,5 +579,40 @@ test(
     assert.doesNotMatch(requests.at(-1).body.input, /بودجه آزمایشی/u);
     assert.equal((await post(realm, { revision: 1, package: pack }, owner)).status, 200);
     assert.equal((await post("/api/chat", approvedTurn, owner)).status, 409);
+    const streamed = await post("/api/chat", { message: "جریان پاسخ", stream: true }, owner);
+    assert.match(streamed.headers.get("content-type"), /^text\/event-stream/u);
+    assert.equal(streamed.headers.get("x-accel-buffering"), "no");
+    const collected = await streamed.text();
+    assert.match(collected, /event: delta\ndata: .*متن /u);
+    assert.match(collected, /event: delta\ndata: .*پیوسته/u);
+    const eventLine = collected.split("\n").find((line) => line.startsWith('data: {"reply"'));
+    const result = JSON.parse(eventLine.slice(6));
+    assert.equal(result.turn.reply, "متن پیوسته");
+    assert.ok(
+      result.latency.firstTextMs >= 0 && result.latency.totalMs >= result.latency.firstTextMs,
+    );
+    const rejectedStream = await post(
+      "/api/chat",
+      { message: "آزمون بخش‌بندی", stream: true },
+      owner,
+    );
+    const visibleStream = await rejectedStream.text();
+    assert.doesNotMatch(visibleStream, new RegExp(token.slice(0, 31), "u"));
+    assert.ok(visibleStream.includes('event: error\ndata: {"error":"gateway"}'));
+    const cancel = new AbortController();
+    const interrupted = await fetch(origin + "/api/chat", {
+      method: "POST",
+      headers: { Origin: origin, "Content-Type": "application/json", ...owner },
+      body: JSON.stringify({ message: "لغو جریان", stream: true }),
+      signal: cancel.signal,
+    });
+    assert.match(interrupted.headers.get("content-type"), /^text\/event-stream/u);
+    cancel.abort();
+    for (let attempt = 0; attempt < 40 && !upstreamCanceled; attempt++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(upstreamCanceled, true);
+    const persistedHistory = await (await history(owner)).text();
+    assert.match(persistedHistory, /متن پیوسته/u);
+    assert.doesNotMatch(persistedHistory, /لغو جریان|آزمون بخش‌بندی/u);
   },
 );

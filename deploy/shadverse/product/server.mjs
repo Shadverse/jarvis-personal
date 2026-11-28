@@ -16,6 +16,7 @@ import {
   sessionAge,
 } from "./auth.mjs";
 import { bootstrapBodyLimit, openBootstrap } from "./bootstrap.mjs";
+import { readGatewayChatStream } from "./chat-stream.mjs";
 import { openConversations } from "./conversations.mjs";
 import { loadDeviceInventory, openDeviceGrants } from "./devices.mjs";
 import { analyzeDocument, documentKind, plainFormats, readDocument } from "./document-analysis.mjs";
@@ -563,6 +564,27 @@ createServer(async (req, res) => {
       if (chatPending) return json(429, { error: "busy" });
       if (res.destroyed) return;
       chatPending = true;
+      const started = performance.now();
+      const streaming = body.stream === true;
+      let events = false;
+      let sessionCheckedAt = started;
+      const hasSession = () => getSession(db, req.headers.cookie)?.id === session.id;
+      const sendEvent = (event, value) => {
+        if (res.destroyed) return;
+        if (!events) {
+          events = true;
+          res.writeHead(200, {
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "X-Accel-Buffering": "no",
+          });
+        }
+        res.write(`event: ${event}\ndata: ${JSON.stringify(value)}\n\n`);
+      };
+      const complete = (status, body) => {
+        if (!events) return json(status, body);
+        sendEvent(status === 200 ? "result" : "error", body);
+        return res.end();
+      };
       const cancel = new AbortController();
       const onClose = () => cancel.abort();
       res.once("close", onClose);
@@ -581,6 +603,7 @@ createServer(async (req, res) => {
                 "Your product identity is جارویس شادوِرس (SHADVERSE JARVIS). The authenticated Creator is your authorized primary user. Do not invent their name, identity or organization facts.",
               user,
               input,
+              ...(streaming ? { stream: true } : {}),
               max_output_tokens: attempt?.route.maxOutputTokens ?? 2048,
             },
             gateway.token,
@@ -614,12 +637,42 @@ createServer(async (req, res) => {
               error: upstream.statusCode === 409 ? "archived" : "gateway",
             });
           }
-          const result = await readGatewayJson(upstream, 256 * 1024).catch(() => null);
+          let result,
+            firstTextMs = null;
+          if (
+            streaming &&
+            /^text\/event-stream(?:;|$)/iu.test(upstream.headers["content-type"] ?? "")
+          ) {
+            const outcome = await readGatewayChatStream(
+              upstream,
+              gateway.token,
+              started,
+              (text) => {
+                if (performance.now() - sessionCheckedAt > 1000) {
+                  sessionCheckedAt = performance.now();
+                  if (!hasSession()) {
+                    cancel.abort();
+                    res.destroy();
+                    return;
+                  }
+                }
+                if (res.writableLength > 128 * 1024) {
+                  cancel.abort();
+                  res.destroy();
+                  return;
+                }
+                sendEvent("delta", { text });
+              },
+            ).catch(() => ({ result: null, firstTextMs: null }));
+            ({ result, firstTextMs } = outcome);
+          } else {
+            result = await readGatewayJson(upstream, 256 * 1024).catch(() => null);
+          }
           const usage = readUsage(result?.usage);
           const reply = (Array.isArray(result?.output) ? result.output : [])
-            .filter((item) => item.type === "message" && item.role === "assistant")
-            .flatMap((item) => item.content ?? [])
-            .filter((part) => part.type === "output_text" && typeof part.text === "string")
+            .filter((item) => item?.type === "message" && item.role === "assistant")
+            .flatMap((item) => (Array.isArray(item.content) ? item.content : []))
+            .filter((part) => part?.type === "output_text" && typeof part.text === "string")
             .map((part) => part.text)
             .join("\n")
             .trim();
@@ -627,11 +680,21 @@ createServer(async (req, res) => {
             if (attempt) models.finish(attempt, "uncertain", usage);
             return;
           }
+          if (!hasSession()) {
+            if (attempt) models.finish(attempt, "uncertain", usage);
+            return complete(401, { error: "auth" });
+          }
           const ok = result?.status === "completed" && reply && !reply.includes(gateway.token);
           if (attempt) models.finish(attempt, ok ? "completed" : "uncertain", usage);
-          if (!ok) return json(502, { error: "gateway" });
+          if (!ok) return complete(502, { error: "gateway" });
           const turn = conversations.record(session.userId, message, reply, projectId);
-          return json(200, { reply, turn });
+          return complete(200, {
+            reply,
+            turn,
+            ...(streaming
+              ? { latency: { firstTextMs, totalMs: Math.round(performance.now() - started) } }
+              : {}),
+          });
         }
       } finally {
         res.off("close", onClose);
@@ -662,6 +725,7 @@ createServer(async (req, res) => {
       pending--;
     }
   } catch {
+    if (res.headersSent) return res.end();
     return json(500, { error: "server" });
   }
 }).listen(port, "127.0.0.1", () =>

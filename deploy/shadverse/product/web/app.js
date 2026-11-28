@@ -1,3 +1,4 @@
+import { readEvents } from "../stream-events.mjs";
 import lensMap from "./art/glass-normal.png";
 import { draftDocument, notesCsv } from "./artifacts.js";
 import { energyCore, voiceStates } from "./core.js";
@@ -38,6 +39,7 @@ const safe = (value) =>
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
   );
 const canPreview = standalone || ["localhost", "127.0.0.1"].includes(location.hostname);
+let textRun = null, partialReply = "", textLatency = null;
 let turns = [],
   historyBefore = null,
   historyLoading = false,
@@ -93,6 +95,10 @@ function stopAudio() {
   }
 }
 function clearWorkspace() {
+  textRun?.abort();
+  textRun = null;
+  partialReply = "";
+  textLatency = null;
   tab = "history";
   workspaceEpoch++;
   projects = [];
@@ -265,6 +271,7 @@ function home() {
  ${historyBefore !== null || historyError ? button("conversation-history", t("بارگیری پیام‌های پیشین", "Load earlier messages")) : ""}
  ${historyError ? `<p role="status">${safe(historyError)}</p>` : ""}
  ${turns.length ? `<ol class="thread" aria-label="${t("پیام‌های گفت‌وگو", "Conversation messages")}">${turns.map(({ message, reply }) => `<li class="turn human"><strong>${t("شما", "You")}</strong><p>${safe(message)}</p></li><li class="turn assistant"><strong>${productName()}</strong><p>${safe(reply)}</p></li>`).join("")}</ol>` : ""}
+ <div class="thread" ${partialReply ? "" : "hidden"} id="stream-reply"><div class="${partialReply ? "turn assistant" : "assistant"}"><p>${safe(partialReply)}</p></div></div>
  <form id="conversation" class="composer glass"><textarea id="draft" maxlength="4000" aria-label="${t("پیام", "Message")}" placeholder="${t("برای جارویس شادوِرس بنویسید…", "Write your message…")}">${safe(draft)}</textarea>
  ${connected && selectedMemory ? `<div class="controls selected-memory"><bdi>${t("یادداشت همراه این پیام به مدل تنظیم‌شده ارسال می‌شود", "Note sent to the configured model with this message")} · ${safe(selectedMemory.text)}</bdi>${button("memory-unselect", t("برداشتن یادداشت", "Remove selected note"))}</div>` : ""}
  ${connected && !selectedMemory ? memoryComposer() : ""}
@@ -272,6 +279,8 @@ function home() {
  <div id="attachments">${files.map((f, i) => `<span class="chip"><bdi>${safe(f.name)}</bdi>${button("remove-" + i, icon("close"), "remove")}</span>`).join("")}</div>
  <div class="tools">${button("attach", icon("attach"), "iconbtn")}<input type="file" multiple id="file" hidden>${button("save-draft", icon("layers") + t("ذخیرهٔ پیش‌نویس", "Save draft"), "textbtn")}
  ${button("voice", icon("wave") + label("voice"), "voicebtn")}<button type="submit" class="primary send" ${connected && !sending ? "" : "disabled"} aria-label="${t("ارسال", "Send")}">${icon("send")}</button></div></form>
+ ${textRun ? button("chat-stop", t("توقف پاسخ", "Stop response")) : ""}
+ ${textLatency?.firstTextMs != null ? `<p class="sub">${t("زمان تا نخستین متن", "Time to first text")} · ${textLatency.firstTextMs} ms</p>` : ""}
  <p class="status" role="status" aria-live="polite">${sending ? t("جارویس در حال آماده‌کردن پاسخ است…", "JARVIS is preparing a reply…") : safe(chatFeedback || (connected ? "" : offline()))}</p></section>
  <section class="library"><h2>${label("workspace")}</h2><div class="shortcuts glass">${["history", "projects", "memory", "files", "gallery"].map((k) => button("tab-" + k, icon(glyph[k]) + "<span>" + label(k) + "</span>", "shortcut")).join("")}</div></section></div>`;
 }
@@ -610,6 +619,7 @@ function shell() {
  <footer class="footnote"><span class="en">SHADVERSE ©</span>${attribution()}</footer></main></div>`;
 }
 function render() {
+  if (page !== "main") textRun?.abort();
   if (page !== "admin" && app.querySelector("[data-action=bootstrap-load]")) bootstrapUI.clear();
   if (page !== "monitor" && app.querySelector("[data-action=device-refresh]")) deviceUI.clear();
   if (page !== "vision" && app.querySelector("[data-vision-state]")) vision.close();
@@ -649,7 +659,7 @@ function render() {
     .querySelectorAll(".remove")
     .forEach((el) => el.setAttribute("aria-label", t("حذف پیوست", "Remove attachment")));
 }
-async function api(path, body, signal) {
+async function api(path, body, signal, onDelta) {
   const response = await fetch("/api/" + path, {
     method: body ? "POST" : "GET",
     signal,
@@ -658,6 +668,14 @@ async function api(path, body, signal) {
       : {},
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (onDelta && response.ok && /^text\/event-stream(?:;|$)/iu.test(response.headers.get("content-type") ?? "")) {
+    for await (const { event, payload } of readEvents(response.body, 512 * 1024)) {
+      if (event === "delta" && typeof payload.text === "string") onDelta(payload.text);
+      if (event === "result") return payload;
+      if (event === "error") throw Error(payload.error);
+    }
+    throw Error("gateway");
+  }
   const result = await response.json();
   if (!response.ok) throw Error(result.error);
   return result;
@@ -845,14 +863,13 @@ app.addEventListener("submit", async (event) => {
       return;
     }
     const requester = session;
+    const run = new AbortController();
+    textRun = run;
+    partialReply = "";
+    textLatency = null;
     sending = true;
     chatFeedback = "";
-    form.setAttribute("aria-busy", "true");
-    form.querySelector(".send").disabled = true;
-    form.parentElement.querySelector(".status").textContent = t(
-      "جارویس در حال آماده‌کردن پاسخ است…",
-      "JARVIS is preparing a reply…",
-    );
+    render();
     try {
       const memory = selectedMemory;
       const ranked = rankedMemory?.message === message && rankedMemory.scope.projectId === memoryScope() ? rankedMemory : null;
@@ -862,8 +879,18 @@ app.addEventListener("submit", async (event) => {
         payload.memoryContext = { ...ranked.scope,
           refs: ranked.context.map(({ id, updated, kind }) => [id, updated, kind]) };
       }
-      const { turn } = await api("chat", payload);
-      if (session !== requester) return;
+      const { turn, latency } = await api("chat", { ...payload, stream: true }, run.signal, (text) => {
+        if (session !== requester || textRun !== run || run.signal.aborted) return;
+        partialReply += text;
+        const preview = app.querySelector("#stream-reply");
+        if (preview) {
+          preview.hidden = false;
+          preview.firstElementChild?.classList.add("turn");
+          preview.querySelector("p").textContent = partialReply;
+        }
+      });
+      if (session !== requester || run.signal.aborted) return;
+      textLatency = latency ?? null;
       mergeTurns([turn]);
       if (selectedMemory === memory) selectedMemory = null;
       if (rankedMemory === ranked) rankedMemory = null;
@@ -876,10 +903,15 @@ app.addEventListener("submit", async (event) => {
       }
       if (err.message === "note_unavailable") selectedMemory = null;
       if (err.message === "context_stale") rankedMemory = null;
-      chatFeedback = errorText(err.message);
+      chatFeedback = run.signal.aborted ? t("پاسخ متوقف شد.", "Response stopped.") : errorText(err.message);
+    } finally {
+      if (textRun === run) {
+        textRun = null;
+        partialReply = "";
+        sending = false;
+      }
     }
     if (session !== requester) return;
-    sending = false;
     if (page === "main") {
       render();
       app.querySelector(".thread .turn:last-child")?.scrollIntoView({ block: "nearest" });
@@ -1089,6 +1121,10 @@ app.addEventListener("click", async (event) => {
   if (!control) return;
   const action = control.dataset.action;
   feedback = "";
+  if (action === "chat-stop") {
+    textRun?.abort();
+    return;
+  }
   if (page === "admin" && session?.bootstrap && !review && action.startsWith("bootstrap-")) {
     await bootstrapUI.handle(action.slice(10));
     return;
@@ -1498,6 +1534,7 @@ app.addEventListener("click", async (event) => {
     page = location.hash === "#voice" ? "voice" : "main";
   } else if (action === "menu") drawer = !drawer;
   else if (action === "logout") {
+    textRun?.abort();
     if (page === "vision") vision.close();
     if (page === "research") research.close();
     try {

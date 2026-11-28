@@ -26,10 +26,34 @@ test(
     await addUser(state, "creator", password, "creator");
     await addUser(state, "member", password, "member", invite(state));
     const sent = [];
+    let finishResponse;
     const gateway = createServer(async (req, res) => {
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
       sent.push(JSON.parse(Buffer.concat(chunks)));
+      if (sent.at(-1).stream === true) {
+        res.setHeader("Content-Type", "text/event-stream");
+        const emit = (event, data) =>
+          res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        emit("response.output_text.delta", { delta: "پاسخ " });
+        finishResponse = () => {
+          emit("response.output_text.delta", { delta: "آزمون" });
+          emit("response.completed", {
+            response: {
+              status: "completed",
+              output: [
+                {
+                  type: "message",
+                  role: "assistant",
+                  content: [{ type: "output_text", text: "پاسخ آزمون" }],
+                },
+              ],
+            },
+          });
+          res.end();
+        };
+        return;
+      }
       res.end(
         JSON.stringify({
           status: "completed",
@@ -156,6 +180,9 @@ test(
     await page.getByText(/Note sent to the configured model/).waitFor();
     await page.locator("#draft").fill("درخواست آزمایشی");
     await page.locator(".composer [type=submit]").click();
+    await page.locator("#stream-reply").getByText("پاسخ").waitFor();
+    await action("chat-stop").waitFor();
+    finishResponse();
     await page.locator(".turn.assistant").getByText("پاسخ آزمون").waitFor();
     assert.deepEqual(JSON.parse(sent[0].input.split("\n")[1]), {
       request: "درخواست آزمایشی",
