@@ -2,9 +2,9 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Phase D · Explicit personal memory
+**Active milestone** Phase E · Private text-document intake
 
-**Latest verified remote checkpoint before Phase D** `62682c14b4aab25ec4f9943c9f4e3e9f248ed7bc`
+**Latest verified remote checkpoint before Phase E** `ba1f0cbb561f3941073d4fc3d4fee2d4ab4bda21`
 
 **Phase A live acceptance** PENDING. The Phase A checkpoint is on the remote branch.
 **Graphics** Frozen. The current interface and isolated hologram preview are retained.
@@ -27,7 +27,8 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | D | Explicit personal notes, text search, edit, delete and export | VERIFIED LOCAL | Saved in the private product SQLite store by authenticated owner. The API fixture checked sign-out and sign-in persistence, persisted bytes on a separate database connection, and cross-account read or mutation denial. |
 | D | Preferences, project memory, retrieval into inference, long-term knowledge and managed backup | MISSING | Existing upstream operator capabilities require a scoped product integration. |
 | E | Attachment selection and local image thumbnails | PARTIALLY IMPLEMENTED | Local selection and preview exist. The product rejects inference requests with attachments. |
-| E | Image and screenshot understanding, documents, PDFs, spreadsheets, uploads, secure storage, camera, voice attachments and authorized visual search | MISSING | No product ingestion or model dispatch for these formats. |
+| E | Private TXT, Markdown and CSV storage, plain-text preview, download and deletion | VERIFIED LOCAL | The signed-in product API fixture checked exact downloaded bytes, UTF-8 and filename validation, size enforcement, CSRF and cross-account denial. |
+| E | Document inference, PDFs, structured spreadsheets, vision, camera, voice and visual search | MISSING | Existing Creator-wide tool authority makes untrusted-file inference a separate restricted-adapter milestone. |
 | F | Provider-backed image, video, audio and music creation, documents, presentations, spreadsheets and downloadable artifacts | MISSING | Product capability catalog and generation adapters are absent. |
 | G | Existing private OpenClaw tool and paired-device access | PARTIALLY IMPLEMENTED | The upstream operator path is separate. There is no product permission layer for application launching, files, browser actions, commands, desktop companion, mobile actions or external tools. |
 | G | Project and task management | PARTIALLY IMPLEMENTED | Project and note interactions live in page memory. Durable task execution and management are absent. |
@@ -75,3 +76,10 @@ In the authenticated Creator Voice screen, the microphone control runs one Persi
 Signed-in users can save, search, edit, delete and export their own explicit notes from Workspace → Memory with no project selected. Notes stay in the owner-only SHADVERSE SQLite state directory across sign-out. Project notes keep their existing local behavior. The API scopes list, update, delete and export to the authenticated account, including when the caller is the Creator, and requires CSRF on writes. Each account has a 100-note cap. Only the explicit Add action saves a note. The product does not send memory to an inference provider.
 
 **Next independent milestone.** Add explicit local document upload and download with ownership and quota enforcement before connecting any document to the Gateway.
+
+
+## Phase E checkpoint
+
+Signed-in Workspace → Files supports explicit UTF-8 text upload, literal preview, download and confirmed delete. Account identity scopes all file operations. The store enforces 1 MiB per file, 50 files and 10 MiB per account. Files are stored as bytes with generated IDs and are never executed or dispatched to inference. The targeted HTTP test passed, including denial of invalid filenames, invalid UTF-8, oversized files and cross-account access. Production proxy and protected storage remain part of private staging acceptance.
+
+**Next independent milestone.** Add local downloadable creation using explicit draft content, without enabling external generation.

@@ -63,7 +63,7 @@ esbuild_package=$(cd "$product" && node -p 'require.resolve("esbuild/package.jso
 encrypted_root=/PATH/TO/ENCRYPTED/CREATOR/STORAGE
 stage=$(mktemp -d "$encrypted_root/jarvis-phase04.XXXXXX")
 install -d -m 700 "$stage"/{state,node_modules,nginx-client,nginx-proxy}
-git archive "$reviewed:$product" auth.mjs build.mjs gateway.mjs manage.mjs memory.mjs models.mjs server.mjs web | tar -x -C "$stage"
+git archive "$reviewed:$product" auth.mjs build.mjs documents.mjs gateway.mjs manage.mjs memory.mjs models.mjs server.mjs web | tar -x -C "$stage"
 ln -s "$(dirname "$esbuild_package")" "$stage/node_modules/esbuild"
 node "$stage/build.mjs"
 

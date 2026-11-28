@@ -46,6 +46,8 @@ let projects = [],
   notes = [],
   personalNotes = null,
   editingNote = null,
+  privateDocuments = null,
+  documentPreview = null,
   savedDrafts = [],
   resources = [],
   query = "";
@@ -71,6 +73,8 @@ function clearWorkspace() {
   notes = [];
   personalNotes = null;
   editingNote = null;
+  privateDocuments = null;
+  documentPreview = null;
   savedDrafts = [];
   resources = [];
   turns = [];
@@ -240,9 +244,11 @@ function syncVoice() {
   }
 }
 const personalMemory = () => Boolean(session && !review && page === "workspace" && tab === "memory" && !activeProject);
+const personalDocuments = () => Boolean(session && !review && page === "workspace" && tab === "files" && !activeProject);
 function workspaceItems() {
   if (tab === "projects") return projects.map((name) => ({ name }));
   if (personalMemory()) return (personalNotes ?? []).map((note) => ({ ...note, name: note.text }));
+  if (personalDocuments()) return privateDocuments ?? [];
   const items =
     {
       history: savedDrafts,
@@ -265,7 +271,11 @@ function listItems() {
         `<div class="work-row">${item.url ? `<img src="${item.url}" alt="">` : icon(glyph[tab])}<bdi>${safe(item.name)}</bdi>${personalMemory()
           ? button("memory-edit-" + item.id, t("ویرایش", "Edit"), "outline") +
             button("memory-delete-" + item.id, t("حذف", "Delete"), "outline")
-          : tab === "history" || tab === "projects" ? button("open-item-" + i, icon("arrow") + t("باز کردن", "Open"), "outline") : ""}</div>`,
+          : personalDocuments()
+            ? button("document-view-" + item.id, t("پیش‌نمایش", "Preview"), "outline") +
+              `<a class="outline" href="/api/documents?id=${encodeURIComponent(item.id)}">${t("دریافت", "Download")}</a>` +
+              button("document-delete-" + item.id, t("حذف", "Delete"), "outline")
+            : tab === "history" || tab === "projects" ? button("open-item-" + i, icon("arrow") + t("باز کردن", "Open"), "outline") : ""}</div>`,
     )
     .join("");
 }
@@ -277,13 +287,19 @@ function space() {
     `<section class="surface stack"><div class="seg">${["history", "projects", "memory", "files", "gallery"].map((k) => button("tab-" + k, label(k), tab === k ? "on" : "")).join("")}</div>
  <h2>${label(tab)}</h2><p class="sub">${personalMemory()
    ? t("تنها یادداشت‌هایی که خودتان ذخیره می‌کنید در حساب شما می‌مانند.", "Only notes you save explicitly stay in your account.")
-   : t("محتوای محلی این نشست با خروج پاک می‌شود.", "Local session content clears on sign-out.")}</p>
+   : personalDocuments()
+     ? t("فایل متنی خصوصی تا ۱ مگابایت. فایل به مدل ارسال نمی‌شود.", "Private text file, up to 1 MiB. Files are not sent to the model.")
+     : t("محتوای محلی این نشست با خروج پاک می‌شود.", "Local session content clears on sign-out.")}</p>
  <div class="controls"><label class="field">${icon("search")}<input type="search" id="search" aria-label="${t("جست‌وجو", "Search")}" value="${safe(query)}" placeholder="${t("جست‌وجو", "Search")}"></label>
  <select id="project-filter" aria-label="${t("پروژهٔ انتخابی", "Active project")}"><option value="">${t("همهٔ پروژه‌ها", "All projects")}</option>${projects.map((n) => `<option ${n === activeProject ? "selected" : ""}>${safe(n)}</option>`).join("")}</select></div>
  ${add ? `<div class="controls"><label class="field"><input id="item-name" dir="auto" maxlength="500" value="${safe(editing?.text ?? "")}" placeholder="${tab === "projects" ? t("نام پروژه", "Project name") : t("یادداشت حافظه", "Memory note")}" aria-label="${label(tab)}"></label>${button("add-item", icon("layers") + (editing ? t("ذخیره", "Save") : t("افزودن", "Add")))}
  ${editing ? button("memory-cancel", t("انصراف", "Cancel"), "outline") : ""}
  ${personalMemory() ? `<a href="/api/memory?export=1" class="outline">${t("خروجی حافظه", "Export memory")}</a>` : ""}</div>` : ""}
- ${["files", "gallery"].includes(tab) ? `<input type="file" id="workspace-file" multiple hidden ${tab === "gallery" ? 'accept="image/png,image/jpeg,image/webp"' : ""}>${button("pick-file", icon("attach") + t("انتخاب فایل محلی", "Choose local file"))}` : ""}
+ ${personalDocuments() ? `<input type="file" id="private-document" accept=".txt,.md,.csv" hidden>
+   ${button("document-upload", icon("attach") + t("ذخیرهٔ فایل خصوصی", "Save private file"))}
+   ${documentPreview ? `<label class="field"><bdi>${safe(documentPreview.name)}</bdi>
+      <textarea readonly rows="8" dir="auto" aria-label="${t("متن فایل", "File contents")}">${safe(documentPreview.text)}</textarea></label>` : ""}`
+   : ["files", "gallery"].includes(tab) ? `<input type="file" id="workspace-file" multiple hidden ${tab === "gallery" ? 'accept="image/png,image/jpeg,image/webp"' : ""}>${button("pick-file", icon("attach") + t("انتخاب فایل محلی", "Choose local file"))}` : ""}
  <div id="results">${listItems()}</div></section>`
   );
 }
@@ -404,6 +420,9 @@ function errorText(code) {
       "دریافت پاسخ از جارویس ممکن نشد. دوباره تلاش کنید.",
       "JARVIS could not respond. Try again.",
     ),
+    file_invalid: t("فایل متنی UTF-8 با نام معتبر و حداکثر ۱ مگابایت انتخاب کنید.", "Choose a valid UTF-8 text file up to 1 MiB."),
+    file_missing: t("فایل در حساب شما پیدا نشد.", "This file was not found in your account."),
+    file_cap: t("به سقف ذخیره‌سازی فایل رسیده‌اید.", "Your file storage limit has been reached."),
     note_missing: t("این یادداشت در حساب شما پیدا نشد.", "This note was not found in your account."),
     note_cap: t("به سقف ۱۰۰ یادداشت رسیده‌اید.", "Your account has reached its 100-note limit."),
     speech_local: t("بازشناسی فارسی روی دستگاه در دسترس نیست. از گفت‌وگوی متنی استفاده کنید.", "Local Persian recognition is unavailable. Use Text chat."),
@@ -601,6 +620,25 @@ async function changePersonalMemory(body, control) {
   }
   if (session === requester && personalMemory()) render();
 }
+async function updateDocuments(body) {
+  const requester = session;
+  try {
+    const result = body?.operation === "view" ? await api("documents?preview=1&id=" + encodeURIComponent(body.id)) : await api("documents", body);
+    if (session !== requester) return;
+    if (body?.operation === "view") {
+      if (!personalDocuments()) return;
+      documentPreview = result;
+    } else if (body || privateDocuments === null) {
+      privateDocuments = result.files;
+      if (body?.operation === "delete") documentPreview = null;
+    }
+  } catch (error) {
+    if (session !== requester || !personalDocuments()) return;
+    if (error.message === "auth") returnToGate();
+    else feedback = errorText(error.message);
+  }
+  if (session === requester && personalDocuments()) render();
+}
 app.addEventListener("click", async (event) => {
   const control = event.target.closest("[data-action]");
   if (!control) return;
@@ -640,6 +678,19 @@ app.addEventListener("click", async (event) => {
       feedback = t("پیش‌نویس در این نشست ذخیره شد.", "Draft saved in this session.");
     } else feedback = t("ابتدا متن پیام را بنویسید.", "Write a message first.");
     render();
+    return;
+  }
+  if (personalDocuments() && action.startsWith("document-")) {
+    if (action === "document-upload") {
+      app.querySelector("#private-document").click();
+      return;
+    }
+    const operation = /^document-(view|delete)-([a-f0-9-]{36})$/.exec(action);
+    if (!operation) return;
+    if (operation[1] === "view" || confirm(t("این فایل حذف شود؟", "Delete this file?"))) {
+      control.disabled = true;
+      await updateDocuments({ operation: operation[1], id: operation[2] });
+    }
     return;
   }
   if (personalMemory() && action.startsWith("memory-")) {
@@ -808,6 +859,7 @@ app.addEventListener("click", async (event) => {
   }
   render();
   if (personalMemory() && personalNotes === null) void loadPersonalMemory();
+  if (personalDocuments() && privateDocuments === null) void updateDocuments();
 });
 app.addEventListener("input", (event) => {
   if (event.target.id === "draft") draft = event.target.value;
@@ -817,11 +869,37 @@ app.addEventListener("input", (event) => {
   }
 });
 app.addEventListener("change", async (event) => {
+  if (event.target.id === "private-document" && personalDocuments()) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (file.size < 1 || file.size > 1024 * 1024) {
+      feedback = errorText("file_invalid");
+      render();
+      return;
+    }
+    const requester = session;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (session === requester && personalDocuments()) {
+        void updateDocuments({ operation: "add", name: file.name, content: reader.result.split(",")[1] });
+      }
+    };
+    reader.onerror = () => {
+      if (session === requester && personalDocuments()) {
+        feedback = errorText("file_invalid");
+        render();
+      }
+    };
+    reader.readAsDataURL(file);
+    return;
+  }
   if (event.target.id === "project-filter") {
     activeProject = event.target.value;
     editingNote = null;
+    documentPreview = null;
     render();
     if (personalMemory() && personalNotes === null) void loadPersonalMemory();
+    if (personalDocuments() && privateDocuments === null) void updateDocuments();
     return;
   }
   if (event.target.id === "workspace-file") {

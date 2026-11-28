@@ -8,6 +8,7 @@
 | Usage | Model attempt accounting excludes prompts, replies and tokens used as credentials. Ambiguous requests retain reservations. An output cap passed to OpenResponses remains provider-dependent. |
 | Persian voice | Local-only recognition and synthesis are required at the browser boundary. Only the transcript reaches the existing Creator Gateway. Browser fixtures verified disconnect propagation. Native device and provider cancellation remain pending. |
 | Explicit memory | Saved notes are scoped to the authenticated account for reads, export and mutations. No automated memory capture or inference injection is enabled. Store the production state on protected storage and scope access to exports. |
+| Private text files | Account-scoped SQLite BLOB storage, bounded UTF-8 input, CSRF on writes and attachment-only download. Previews are literal text. Uploaded content stays out of the privileged Gateway until a restricted file-inference boundary is verified. |
 | Commercial isolation | DISABLED FOR SECURITY. No commercial account can route through the Creator Gateway. Independent runtime, storage and credential isolation requires live acceptance before activation. |
 | Provider grants and billing | Provider configuration requires official verified grants. No paid services or real billing are authorized. |
 | Production | Deployment, public Gateway access, production DB changes and infrastructure changes remain gated. |

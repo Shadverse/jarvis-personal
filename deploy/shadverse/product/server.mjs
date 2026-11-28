@@ -12,12 +12,14 @@ import {
   validPassword,
   sessionAge,
 } from "./auth.mjs";
+import { documentBodyLimit, openDocuments } from "./documents.mjs";
 import { loadGateway, postResponses, readGatewayJson } from "./gateway.mjs";
 import { openMemory } from "./memory.mjs";
 import { createModelRegistry, loadModelPolicy, readUsage } from "./models.mjs";
 process.umask(0o077);
 const db = openStore(process.env.JARVIS_STATE);
 const memory = openMemory(db);
+const documents = openDocuments(db);
 const port = Number(process.env.PORT || 3000);
 const origin = new URL(process.env.JARVIS_ORIGIN || `http://localhost:${port}`);
 if (
@@ -93,6 +95,22 @@ createServer(async (req, res) => {
     if (req.method === "GET") {
       if (!session) return json(401, { error: "auth" });
       if (path === "/api/session") return json(200, sessionInfo(session));
+      if (path === "/api/documents") {
+        const id = url.searchParams.get("id");
+        if (id === null) return json(200, { files: documents.list(session.userId) });
+        const document = documents.get(session.userId, id);
+        if (!document) return json(404, { error: "file_missing" });
+        const bytes = Buffer.from(document.payload);
+        if (url.searchParams.get("preview") === "1") {
+          return json(200, { name: document.name, text: bytes.toString("utf8") });
+        }
+        res.writeHead(200, {
+          "Content-Type": "application/octet-stream",
+          "Content-Disposition":
+            "attachment; filename*=UTF-8''" + encodeURIComponent(document.name),
+        });
+        return res.end(bytes);
+      }
       if (path === "/api/memory") {
         if (url.searchParams.get("export") === "1") {
           res.setHeader(
@@ -118,7 +136,8 @@ createServer(async (req, res) => {
     const chat = path === "/api/chat";
     const manageModels = path === "/api/models";
     const manageMemory = path === "/api/memory";
-    if (chat || manageModels || manageMemory || path === "/api/logout") {
+    const manageDocuments = path === "/api/documents";
+    if (chat || manageModels || manageMemory || manageDocuments || path === "/api/logout") {
       if (!session) {
         if (path === "/api/logout") res.setHeader("Set-Cookie", cookie("", 0));
         return json(401, { error: "auth" });
@@ -129,7 +148,8 @@ createServer(async (req, res) => {
         res.setHeader("Set-Cookie", cookie("", 0));
         return json(200, { ok: true });
       }
-      if (!manageMemory && !canChat(session)) return json(403, { error: "forbidden" });
+      if (!manageMemory && !manageDocuments && !canChat(session))
+        return json(403, { error: "forbidden" });
     } else {
       if (!["/api/login", "/api/activate"].includes(path)) return json(404, { error: "missing" });
       if (pending >= 4 || rateLimit(db, "ip/" + req.socket.remoteAddress, 40))
@@ -137,7 +157,7 @@ createServer(async (req, res) => {
     }
     const chunks = [];
     let length = 0;
-    const maxBody = chat ? 24576 : 4096;
+    const maxBody = manageDocuments ? documentBodyLimit : chat ? 24576 : 4096;
     for await (const chunk of req) {
       length += chunk.length;
       if (length > maxBody) return json(413, { error: "invalid" });
@@ -148,6 +168,12 @@ createServer(async (req, res) => {
       body = JSON.parse(Buffer.concat(chunks));
     } catch {
       return json(400, { error: "invalid" });
+    }
+    if (manageDocuments) {
+      const error = documents.change(session.userId, body);
+      if (error)
+        return json(error === "file_missing" ? 404 : error === "file_cap" ? 409 : 400, { error });
+      return json(200, { files: documents.list(session.userId) });
     }
     if (manageMemory) {
       const error = memory.change(session.userId, body);

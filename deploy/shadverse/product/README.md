@@ -44,6 +44,12 @@ Use `node manage.mjs invite` privately to issue a one-use member code valid for 
 
 Drafts, selections and displayed turns live in page memory and clear at sign-out. OpenClaw keeps the conversation on its existing storage path, using a dedicated session for the configured Creator. Existing paired-device tools and conversations remain on the private Control UI. The service worker stores no application data.
 
+## Private text files and memory
+
+In a signed-in workspace with no project selected, **Memory** saves explicit notes for the account. **Files** accepts UTF-8 TXT, Markdown and CSV for private storage, literal-text preview and download. Limits are 1 MiB per document, 10 MiB and 50 files per account. Deletion asks for confirmation. Files are kept in the owner-only product database and are not passed to OpenClaw. The preview doesn't interpret Markdown, CSV formulas or executable markup.
+
+For larger uploads during private staging, allow up to 1400 KiB of request body specifically at `/api/documents` in the staging proxy. The application independently enforces the decoded limit and account quota. Use protected staging storage and synthetic test files.
+
 ## Authentication boundary
 
 The application hashes passwords with individually salted scrypt (N=32768, r=8, p=3). Each successful login creates a random session token. SQLite stores its SHA-256 digest and a separate CSRF value. The four-hour cookie uses the __Host- prefix, Secure, HttpOnly and SameSite=Strict. The server enforces expiry and role checks. JSON state changes require the configured origin and logout also requires the session CSRF token. Login and activation share persistent limits of eight attempts per username and forty per socket IP per ten minutes. Four password operations can run concurrently per server process.
