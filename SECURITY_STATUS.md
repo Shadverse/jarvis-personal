@@ -10,6 +10,7 @@
 | Explicit memory | Saved notes are scoped to the authenticated account for reads, export and mutations. No automated memory capture or inference injection is enabled. Store the production state on protected storage and scope access to exports. |
 | Private text files | Account-scoped SQLite BLOB storage, bounded UTF-8 input, CSRF on writes and attachment-only download. Previews are literal text. Uploaded content stays out of the privileged Gateway until a restricted file-inference boundary is verified. |
 | Local artifact exports | Printable HTML escapes user text and blocks script and network access with a document CSP. CSV cells are quoted and spreadsheet formula prefixes are neutralized. The browser creates these files from explicit workspace data. |
+| Workspace actions | The first allowlisted action writes only a project row under the authenticated owner and requires CSRF. The registry accepts no command, destination, caller-supplied owner or model-generated execution. |
 | Commercial isolation | DISABLED FOR SECURITY. No commercial account can route through the Creator Gateway. Independent runtime, storage and credential isolation requires live acceptance before activation. |
 | Provider grants and billing | Provider configuration requires official verified grants. No paid services or real billing are authorized. |
 | Production | Deployment, public Gateway access, production DB changes and infrastructure changes remain gated. |

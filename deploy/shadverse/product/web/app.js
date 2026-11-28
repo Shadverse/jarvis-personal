@@ -43,6 +43,7 @@ let head = null,
   voiceEpoch = 0,
   voiceRun = null;
 let projects = [],
+  projectsLoaded = false,
   activeProject = "",
   notes = [],
   personalNotes = null,
@@ -70,6 +71,7 @@ function stopAudio() {
 function clearWorkspace() {
   workspaceEpoch++;
   projects = [];
+  projectsLoaded = false;
   activeProject = "";
   notes = [];
   personalNotes = null;
@@ -244,6 +246,7 @@ function syncVoice() {
     b.setAttribute("aria-pressed", String(active));
   }
 }
+const privateProjects = () => Boolean(session && !review && page === "workspace" && tab === "projects");
 const personalMemory = () => Boolean(session && !review && page === "workspace" && tab === "memory" && !activeProject);
 const personalDocuments = () => Boolean(session && !review && page === "workspace" && tab === "files" && !activeProject);
 function downloadArtifact(content, type, filename) {
@@ -295,14 +298,14 @@ function space() {
   return (
     title("workspace") +
     `<section class="surface stack"><div class="seg">${["history", "projects", "memory", "files", "gallery"].map((k) => button("tab-" + k, label(k), tab === k ? "on" : "")).join("")}</div>
- <h2>${label(tab)}</h2><p class="sub">${personalMemory()
+ <h2>${label(tab)}</h2><p class="sub">${privateProjects() ? t("پروژه‌های خصوصی در حساب شما ذخیره می‌شوند.", "Private projects stay in your account.") : personalMemory()
    ? t("تنها یادداشت‌هایی که خودتان ذخیره می‌کنید در حساب شما می‌مانند.", "Only notes you save explicitly stay in your account.")
    : personalDocuments()
      ? t("فایل متنی خصوصی تا ۱ مگابایت. فایل به مدل ارسال نمی‌شود.", "Private text file, up to 1 MiB. Files are not sent to the model.")
      : t("محتوای محلی این نشست با خروج پاک می‌شود.", "Local session content clears on sign-out.")}</p>
  <div class="controls"><label class="field">${icon("search")}<input type="search" id="search" aria-label="${t("جست‌وجو", "Search")}" value="${safe(query)}" placeholder="${t("جست‌وجو", "Search")}"></label>
  <select id="project-filter" aria-label="${t("پروژهٔ انتخابی", "Active project")}"><option value="">${t("همهٔ پروژه‌ها", "All projects")}</option>${projects.map((n) => `<option ${n === activeProject ? "selected" : ""}>${safe(n)}</option>`).join("")}</select></div>
- ${add ? `<div class="controls"><label class="field"><input id="item-name" dir="auto" maxlength="500" value="${safe(editing?.text ?? "")}" placeholder="${tab === "projects" ? t("نام پروژه", "Project name") : t("یادداشت حافظه", "Memory note")}" aria-label="${label(tab)}"></label>${button("add-item", icon("layers") + (editing ? t("ذخیره", "Save") : t("افزودن", "Add")))}
+ ${add ? `<div class="controls"><label class="field"><input id="item-name" dir="auto" maxlength="${privateProjects() ? 120 : 500}" value="${safe(editing?.text ?? "")}" placeholder="${tab === "projects" ? t("نام پروژه", "Project name") : t("یادداشت حافظه", "Memory note")}" aria-label="${label(tab)}"></label>${button("add-item", icon("layers") + (editing ? t("ذخیره", "Save") : t("افزودن", "Add")))}
  ${editing ? button("memory-cancel", t("انصراف", "Cancel"), "outline") : ""}
  ${personalMemory() ? `<a href="/api/memory?export=1" class="outline">${t("خروجی حافظه", "Export memory")}</a>
    ${personalNotes?.length ? button("memory-csv", t("دریافت جدول CSV", "Download CSV"), "outline") : ""}` : ""}</div>` : ""}
@@ -433,6 +436,8 @@ function errorText(code) {
     ),
     file_invalid: t("فایل متنی UTF-8 با نام معتبر و حداکثر ۱ مگابایت انتخاب کنید.", "Choose a valid UTF-8 text file up to 1 MiB."),
     file_missing: t("فایل در حساب شما پیدا نشد.", "This file was not found in your account."),
+    project_invalid: t("نام معتبر پروژه را وارد کنید.", "Enter a valid project name."),
+    project_cap: t("حداکثر ۵۰ پروژه مجاز است.", "You can save up to 50 projects."),
     file_cap: t("به سقف ذخیره‌سازی فایل رسیده‌اید.", "Your file storage limit has been reached."),
     note_missing: t("این یادداشت در حساب شما پیدا نشد.", "This note was not found in your account."),
     note_cap: t("به سقف ۱۰۰ یادداشت رسیده‌اید.", "Your account has reached its 100-note limit."),
@@ -595,6 +600,31 @@ app.addEventListener("submit", async (event) => {
   }
   render();
 });
+async function updateProjects(name, control) {
+  const requester = session;
+  if (control) control.disabled = true;
+  try {
+    const result = await api("actions", name ? { action: "project.create", input: { name } } : undefined);
+    if (session !== requester || (!name && projectsLoaded)) return;
+    projects = result.projects.map((project) => project.name);
+    projectsLoaded = true;
+    if (name && privateProjects()) {
+      activeProject = result.project.name;
+      query = "";
+    }
+  } catch (error) {
+    if (session !== requester || !privateProjects()) return;
+    if (error.message === "auth") {
+      returnToGate();
+      return;
+    }
+    feedback = errorText(error.message);
+    render();
+    if (name) app.querySelector("#item-name").value = name;
+    return;
+  }
+  if (privateProjects()) render();
+}
 async function loadPersonalMemory() {
   const requester = session;
   try {
@@ -738,6 +768,10 @@ app.addEventListener("click", async (event) => {
       await changePersonalMemory({ operation: editingNote ? "edit" : "add", id: editingNote, text: name }, control);
       return;
     }
+    if (privateProjects()) {
+      await updateProjects(name, control);
+      return;
+    }
     if (tab === "projects") {
       if (!projects.includes(name)) projects.push(name);
       activeProject = name;
@@ -878,6 +912,7 @@ app.addEventListener("click", async (event) => {
     }
   }
   render();
+  if (privateProjects() && !projectsLoaded) void updateProjects();
   if (personalMemory() && personalNotes === null) void loadPersonalMemory();
   if (personalDocuments() && privateDocuments === null) void updateDocuments();
 });

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { resolve, extname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { openActions } from "./actions.mjs";
 import {
   openStore,
   getSession,
@@ -20,6 +21,7 @@ process.umask(0o077);
 const db = openStore(process.env.JARVIS_STATE);
 const memory = openMemory(db);
 const documents = openDocuments(db);
+const actions = openActions(db);
 const port = Number(process.env.PORT || 3000);
 const origin = new URL(process.env.JARVIS_ORIGIN || `http://localhost:${port}`);
 if (
@@ -95,6 +97,7 @@ createServer(async (req, res) => {
     if (req.method === "GET") {
       if (!session) return json(401, { error: "auth" });
       if (path === "/api/session") return json(200, sessionInfo(session));
+      if (path === "/api/actions") return json(200, actions.list(session.userId));
       if (path === "/api/documents") {
         const id = url.searchParams.get("id");
         if (id === null) return json(200, { files: documents.list(session.userId) });
@@ -137,7 +140,15 @@ createServer(async (req, res) => {
     const manageModels = path === "/api/models";
     const manageMemory = path === "/api/memory";
     const manageDocuments = path === "/api/documents";
-    if (chat || manageModels || manageMemory || manageDocuments || path === "/api/logout") {
+    const executeAction = path === "/api/actions";
+    if (
+      chat ||
+      manageModels ||
+      manageMemory ||
+      manageDocuments ||
+      executeAction ||
+      path === "/api/logout"
+    ) {
       if (!session) {
         if (path === "/api/logout") res.setHeader("Set-Cookie", cookie("", 0));
         return json(401, { error: "auth" });
@@ -148,8 +159,7 @@ createServer(async (req, res) => {
         res.setHeader("Set-Cookie", cookie("", 0));
         return json(200, { ok: true });
       }
-      if (!manageMemory && !manageDocuments && !canChat(session))
-        return json(403, { error: "forbidden" });
+      if ((chat || manageModels) && !canChat(session)) return json(403, { error: "forbidden" });
     } else {
       if (!["/api/login", "/api/activate"].includes(path)) return json(404, { error: "missing" });
       if (pending >= 4 || rateLimit(db, "ip/" + req.socket.remoteAddress, 40))
@@ -168,6 +178,10 @@ createServer(async (req, res) => {
       body = JSON.parse(Buffer.concat(chunks));
     } catch {
       return json(400, { error: "invalid" });
+    }
+    if (executeAction) {
+      const result = actions.execute(session.userId, body);
+      return json(result.error === "project_cap" ? 409 : result.error ? 400 : 200, result);
     }
     if (manageDocuments) {
       const error = documents.change(session.userId, body);

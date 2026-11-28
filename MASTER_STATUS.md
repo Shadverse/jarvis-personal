@@ -2,9 +2,9 @@
 
 **Branch** `feature/shadverse-product-recovery`
 **Reference baseline** `c23824d5821ddb4a260c6e13c882cc25fe5bc628`
-**Active milestone** Phase F · Local document and spreadsheet exports
+**Active milestone** Phase G · Private project actions
 
-**Latest verified remote checkpoint before Phase F** `f5f6d70fcdfa4023549af9525d57225a6d52ae81`
+**Latest verified remote checkpoint before Phase G** `9e7c09461f95410d32bf99250035fa799b170a0b`
 
 **Phase A live acceptance** PENDING. The Phase A checkpoint is on the remote branch.
 **Graphics** Frozen. The current interface and isolated hologram preview are retained.
@@ -32,7 +32,8 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | F | Printable draft documents and personal-note spreadsheets | VERIFIED LOCAL | Standalone HTML and UTF-8 CSV generated in the browser from explicit workspace data. Output escaping and CSV protection passed the local artifact test. |
 | F | Provider-backed image, video, audio, music, presentations and document generation | MISSING | Product capability catalog and generation adapters are absent. |
 | G | Existing private OpenClaw tool and paired-device access | PARTIALLY IMPLEMENTED | The upstream operator path is separate. There is no product permission layer for application launching, files, browser actions, commands, desktop companion, mobile actions or external tools. |
-| G | Project and task management | PARTIALLY IMPLEMENTED | Project and note interactions live in page memory. Durable task execution and management are absent. |
+| G | Account-scoped project creation and listing | VERIFIED LOCAL | Workspace registers one explicit local action. Isolation, limits, CSRF and idempotent creation passed the HTTP fixture. |
+| G–I | Project tasks and automated action execution | MISSING | No durable task lifecycle or assistant-triggered execution. |
 | H | Email, calendar, web search, GitHub, cloud storage, messaging, APIs and MCP integrations | MISSING | Product connector authorization, scoped accounts and permission UI are absent. |
 | I | Reminders, schedules, workflows, triggers, job execution and recovery, cancellation, notifications, audit and emergency stop | MISSING | No product job subsystem. Existing OpenClaw scheduling has no SHADVERSE admission or lifecycle integration. |
 | J | Creator role, read-only directory and operator registration codes and revocation | PARTIALLY IMPLEMENTED | Creator and member roles are present. Operator commands and the directory cover limited administration. |
@@ -40,6 +41,7 @@ Statuses apply to the SHADVERSE product. Upstream OpenClaw capability alone does
 | K | Free, Pro and Ultra monthly and annual presentation | MOCKED | Displayed tier offers have no entitlements or checkout. |
 | K | Registration-code activation and Creator credential separation | PARTIALLY IMPLEMENTED | Activation is enforced. The Creator bridge denies member accounts. Commercial isolated runtimes are an approved architecture, with implementation pending. |
 | K | Entitlements, model restrictions, limits, lifecycle, isolated tenants and payments | MISSING | No server-enforced commercial subscription or billing pipeline. |
+| L | Reliability and readiness | PARTIALLY IMPLEMENTED | Existing startup validation and local regression coverage. Operational health, backup restore and shutdown acceptance are pending. |
 | Cross-cutting | Persian-first, RTL, headings, branding and accessible mobile interaction | PARTIALLY IMPLEMENTED | Persian Gate and direction handling are implemented. Prior browser coverage found an existing narrow-mobile composer layout failure. No design changes during the freeze. |
 
 No production deployment, database migration, credential grant, or paid-provider activation is part of this milestone.
@@ -90,4 +92,11 @@ Signed-in Workspace → Files supports explicit UTF-8 text upload, literal previ
 
 Workspace → Drafts exports the selected draft as standalone printable HTML with Persian RTL support. Workspace → Memory exports the account’s explicit notes as UTF-8 CSV. The targeted artifact test checked Persian text, HTML escaping, script blocking and spreadsheet formula neutralization. Both exports run in the browser.
 
-**Next independent milestone.** Start Phase G with account-scoped project tasks. Persist explicit create, list, complete and delete operations, enforce ownership and CSRF, and add one synthetic two-account test. Keep device and external actions gated behind their separate permission model.
+**Next independent milestone.** Start Phase G with an account-scoped project action and use the existing workspace.
+
+
+## Phase G checkpoint
+
+Workspace → Projects uses the authenticated action registry to create and list private projects. The single allowlisted action validates a name, derives the owner from the session and records successful creation with a generated ID and timestamp. The HTTP fixture checked anonymous denial, CSRF, unknown actions, requester-supplied owners, cross-account isolation, persistency across sign-out and the 50-project limit. Repeat submissions of an existing name return its existing record. The registry has no shell, device, external messaging, background jobs or model-triggered execution.
+
+**Next implementation step.** Add explicit task create, list, complete and confirmed delete actions using the persisted project ID. Enforce project ownership in every task statement, cap tasks per project and verify two-account denial in one targeted test.
